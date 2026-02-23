@@ -150,9 +150,7 @@ class TemporalSplitter:
         train = df[train_mask].reset_index(drop=True)
         test = df[test_mask].reset_index(drop=True)
 
-        logger.info(
-            f"TemporalSplitter: cutoff={cutoff} → " f"train={len(train):,}, test={len(test):,}"
-        )
+        logger.info(f"TemporalSplitter: cutoff={cutoff} → train={len(train):,}, test={len(test):,}")
 
         return SplitResult(
             train=train,

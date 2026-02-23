@@ -76,9 +76,7 @@ class TestFlatFileLoader:
     def test_load_csv(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         csv_file.write_text(
-            "patient_id,heart_rate,charttime\n"
-            "1,72,2023-01-01 08:00:00\n"
-            "2,85,2023-01-01 09:00:00\n"
+            "patient_id,heart_rate,charttime\n1,72,2023-01-01 08:00:00\n2,85,2023-01-01 09:00:00\n"
         )
         loader = FlatFileLoader(csv_file, id_col="patient_id")
         df = loader.load()

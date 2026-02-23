@@ -61,7 +61,6 @@ def icd_df() -> pd.DataFrame:
 
 
 class TestClinicalOutlierClipper:
-
     def test_clip_action_replaces_with_boundary(self, vitals_df):
         clipper = ClinicalOutlierClipper(action="clip")
         result = clipper.fit_transform(vitals_df)
@@ -172,7 +171,6 @@ class TestClinicalOutlierClipper:
 
 
 class TestUnitNormalizer:
-
     def test_explicit_celsius_to_fahrenheit(self):
         df = pd.DataFrame({"temperature": [0.0, 37.0, 100.0]})
         spec = UNIT_CONVERSIONS["temperature__c__f"]
@@ -257,7 +255,6 @@ class TestUnitNormalizer:
 
 
 class TestICDMapper:
-
     def test_map_known_code(self):
         mapper = ICDMapper()
         assert mapper.map_code("4280") == "I509"

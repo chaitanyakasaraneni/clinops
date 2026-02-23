@@ -31,29 +31,35 @@ from clinops.ingest.schema import SchemaValidationError
 
 _REQUIRED_COLS: dict[str, list[str]] = {
     "chartevents": ["subject_id", "hadm_id", "stay_id", "itemid", "charttime", "valuenum"],
-    "labevents":   ["subject_id", "hadm_id", "itemid", "charttime", "valuenum", "valueuom"],
-    "admissions":  ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
-    "patients":    ["subject_id", "gender", "anchor_age", "anchor_year", "dod"],
+    "labevents": ["subject_id", "hadm_id", "itemid", "charttime", "valuenum", "valueuom"],
+    "admissions": ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
+    "patients": ["subject_id", "gender", "anchor_age", "anchor_year", "dod"],
     "prescriptions": ["subject_id", "hadm_id", "starttime", "stoptime", "drug", "dose_val_rx"],
     "inputevents": [
-        "subject_id", "hadm_id", "stay_id", "itemid", "starttime", "amount", "amountuom",
+        "subject_id",
+        "hadm_id",
+        "stay_id",
+        "itemid",
+        "starttime",
+        "amount",
+        "amountuom",
     ],
-    "d_items":     ["itemid", "label", "category"],
-    "d_labitems":  ["itemid", "label", "fluid", "category"],
-    "icustays":    ["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
+    "d_items": ["itemid", "label", "category"],
+    "d_labitems": ["itemid", "label", "fluid", "category"],
+    "icustays": ["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
 }
 
 _TABLE_PATHS: dict[str, tuple[str, str]] = {
     # table_name: (module, filename_stem)
-    "chartevents":   ("icu",  "chartevents"),
-    "labevents":     ("hosp", "labevents"),
-    "admissions":    ("hosp", "admissions"),
-    "patients":      ("hosp", "patients"),
+    "chartevents": ("icu", "chartevents"),
+    "labevents": ("hosp", "labevents"),
+    "admissions": ("hosp", "admissions"),
+    "patients": ("hosp", "patients"),
     "prescriptions": ("hosp", "prescriptions"),
-    "inputevents":   ("icu",  "inputevents"),
-    "d_items":       ("icu",  "d_items"),
-    "d_labitems":    ("hosp", "d_labitems"),
-    "icustays":      ("icu",  "icustays"),
+    "inputevents": ("icu", "inputevents"),
+    "d_items": ("icu", "d_items"),
+    "d_labitems": ("hosp", "d_labitems"),
+    "icustays": ("icu", "icustays"),
 }
 
 

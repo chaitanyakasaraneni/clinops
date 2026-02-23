@@ -147,7 +147,7 @@ with tempfile.TemporaryDirectory() as tmp_root:
     tbl = MimicTableLoader(root)
 
     adm = tbl.admissions()
-    print(f"[ingest] admissions:     {len(adm):,} rows — " f"columns: {list(adm.columns)}")
+    print(f"[ingest] admissions:     {len(adm):,} rows — columns: {list(adm.columns)}")
 
     dx = tbl.diagnoses_icd(primary_only=True)
     print(
@@ -162,7 +162,7 @@ with tempfile.TemporaryDirectory() as tmp_root:
     )
 
     labs = tbl.labevents(with_ref_range=False)
-    print(f"[ingest] labevents:      {len(labs):,} rows " f"(ref_range columns dropped by default)")
+    print(f"[ingest] labevents:      {len(labs):,} rows (ref_range columns dropped by default)")
 
 # ── FlatFileLoader + schema validation ──────────────────────────────────────
 schema = ClinicalSchema(
@@ -368,9 +368,9 @@ print(f"  ICD codes mapped:     {len(harmonized)}")
 print(f"  Windows:              {len(windows):,}")
 print(f"  Enriched shape:       {enriched.shape}")
 print(f"  Aligned events:       {len(aligned):,}  (0–36h post-ICU-admission)")
-print(f"  Temporal split  →  train: {len(t_result.train):,}  " f"test: {len(t_result.test):,}")
-print(f"  Patient split   →  train: {len(p_result.train):,}  " f"test: {len(p_result.test):,}")
-print(f"  Stratified split→  train: {len(s_result.train):,}  " f"test: {len(s_result.test):,}")
+print(f"  Temporal split  →  train: {len(t_result.train):,}  test: {len(t_result.test):,}")
+print(f"  Patient split   →  train: {len(p_result.train):,}  test: {len(p_result.test):,}")
+print(f"  Stratified split→  train: {len(s_result.train):,}  test: {len(s_result.test):,}")
 print()
 print("Next steps:")
 print("  • MimicTableLoader('/data/mimic-iv-2.2') — swap in real MIMIC-IV data")

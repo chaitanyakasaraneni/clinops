@@ -64,7 +64,6 @@ def stratified_df() -> pd.DataFrame:
 
 
 class TestSplitResult:
-
     def test_train_size_and_test_size(self):
         train = pd.DataFrame({"x": range(80)})
         test = pd.DataFrame({"x": range(20)})
@@ -94,7 +93,6 @@ class TestSplitResult:
 
 
 class TestTemporalSplitter:
-
     def test_explicit_cutoff_splits_correctly(self, temporal_df):
         cutoff = "2150-07-01"
         splitter = TemporalSplitter(cutoff=cutoff, time_col="charttime")
@@ -144,7 +142,6 @@ class TestTemporalSplitter:
 
 
 class TestPatientSplitter:
-
     def test_no_patient_leakage(self, patient_df):
         splitter = PatientSplitter(id_col="subject_id", test_size=0.2)
         result = splitter.split(patient_df)
@@ -204,7 +201,6 @@ class TestPatientSplitter:
 
 
 class TestStratifiedPatientSplitter:
-
     def test_no_patient_leakage(self, stratified_df):
         splitter = StratifiedPatientSplitter(
             id_col="subject_id", outcome_col="outcome", test_size=0.2
