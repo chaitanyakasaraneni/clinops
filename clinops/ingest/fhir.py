@@ -17,7 +17,6 @@ from typing import Literal
 import pandas as pd
 from loguru import logger
 
-
 ResourceType = Literal["Patient", "Observation", "Condition", "MedicationRequest"]
 
 
@@ -77,7 +76,9 @@ class FHIRLoader:
         for r in records:
             code_obj = r.get("code", {})
             codings = code_obj.get("coding", [])
-            loinc = next((c["code"] for c in codings if "loinc" in c.get("system", "").lower()), None)
+            loinc = next(
+                (c["code"] for c in codings if "loinc" in c.get("system", "").lower()), None
+            )
             value = r.get("valueQuantity", {})
             rows.append({
                 "observation_id": r.get("id"),

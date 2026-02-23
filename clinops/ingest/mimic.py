@@ -14,16 +14,15 @@ Example
 
 from __future__ import annotations
 
-import os
+import contextlib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
 from clinops.ingest.schema import SchemaValidationError
-
 
 # ---------------------------------------------------------------------------
 # Table schemas — minimum required columns per MIMIC-IV table
@@ -35,7 +34,9 @@ _REQUIRED_COLS: dict[str, list[str]] = {
     "admissions":  ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
     "patients":    ["subject_id", "gender", "anchor_age", "anchor_year", "dod"],
     "prescriptions": ["subject_id", "hadm_id", "starttime", "stoptime", "drug", "dose_val_rx"],
-    "inputevents": ["subject_id", "hadm_id", "stay_id", "itemid", "starttime", "amount", "amountuom"],
+    "inputevents": [
+      "subject_id", "hadm_id", "stay_id", "itemid", "starttime", "amount", "amountuom",
+    ],
     "d_items":     ["itemid", "label", "category"],
     "d_labitems":  ["itemid", "label", "fluid", "category"],
     "icustays":    ["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
@@ -111,7 +112,9 @@ class MimicLoader:
             chunk_size=chunk_size,
         )
         self._version = self._detect_version() if version == "auto" else version
-        logger.info(f"MimicLoader initialised — path={self._cfg.mimic_path}, version={self._version}")
+        logger.info(
+            f"MimicLoader initialised — path={self._cfg.mimic_path}, version={self._version}"
+        )
 
     # ------------------------------------------------------------------
     # Public table accessors
@@ -275,10 +278,8 @@ class MimicLoader:
         time_cols = [c for c in df.columns if "time" in c or c == "dod"]
         for col in time_cols:
             if col in df.columns and df[col].dtype == object:
-                try:
+                with contextlib.suppress(Exception):
                     df[col] = pd.to_datetime(df[col], errors="coerce")
-                except Exception:  # noqa: BLE001
-                    pass
         return df
 
     def _filter(
@@ -300,7 +301,9 @@ class MimicLoader:
         if item_ids is not None and "itemid" in df.columns:
             df = df[df["itemid"].isin(item_ids)]
 
-        time_col = next((c for c in ["charttime", "starttime", "admittime"] if c in df.columns), None)
+        time_col = next(
+            (c for c in ["charttime", "starttime", "admittime"] if c in df.columns), None
+        )
         if time_col:
             if start_time:
                 df = df[df[time_col] >= pd.Timestamp(start_time)]

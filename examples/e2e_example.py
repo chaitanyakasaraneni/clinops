@@ -17,6 +17,15 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from clinops.ingest import ClinicalSchema, ColumnSpec, FlatFileLoader
+from clinops.temporal import (
+    CohortAligner,
+    ImputationStrategy,
+    Imputer,
+    LagFeatureBuilder,
+    TemporalWindower,
+)
+
 # ── Synthetic MIMIC-IV-style data ───────────────────────────────────────────
 print("=" * 60)
 print("clinops v0.1 — End-to-End Example")
@@ -46,7 +55,6 @@ print(f"\n[ingest] Synthetic chartevents: {len(chartevents):,} rows, "
       f"{chartevents['subject_id'].nunique()} patients")
 
 # ── FlatFileLoader + schema validation ──────────────────────────────────────
-from clinops.ingest import ClinicalSchema, ColumnSpec, FlatFileLoader
 
 schema = ClinicalSchema(
     name="vitals",
@@ -70,7 +78,6 @@ print(loader.summary())
 os.unlink(tmp_path)
 
 # ── Temporal windowing ───────────────────────────────────────────────────────
-from clinops.temporal import ImputationStrategy, TemporalWindower
 
 print("\n[temporal] Extracting 6-hour windows (step=3h, imputation=FORWARD_FILL)...")
 windower = TemporalWindower(
@@ -89,7 +96,6 @@ print(f"[temporal] {len(windows):,} windows — shape: {windows.shape}")
 print(windows.head(3).to_string(index=False))
 
 # ── Imputer (train/test split — no leakage) ─────────────────────────────────
-from clinops.temporal import Imputer
 
 split  = int(len(windows) * 0.7)
 train_w = windows.iloc[:split].copy()
@@ -108,7 +114,6 @@ test_imputed = imputer.transform(test_w)
 print(f"[temporal] After imputation: {test_imputed['heart_rate'].isna().sum()} missing remaining")
 
 # ── Lag features ─────────────────────────────────────────────────────────────
-from clinops.temporal import LagFeatureBuilder
 
 print("\n[temporal] Building lag (t-1, t-2) and 4-window rolling features...")
 enriched = LagFeatureBuilder(
@@ -121,7 +126,6 @@ new_cols = [c for c in enriched.columns if c not in windows.columns]
 print(f"[temporal] Added {len(new_cols)} features: {new_cols}")
 
 # ── Cohort alignment to anchor event ─────────────────────────────────────────
-from clinops.temporal import CohortAligner
 
 admissions = pd.DataFrame({
     "subject_id": range(1, N_PATIENTS + 1),

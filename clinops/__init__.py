@@ -15,7 +15,7 @@ Coming in v0.2
 - clinops.explain     : LLM-generated clinical rationales for model outputs
 """
 
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
 
 try:
     __version__ = version("clinops")

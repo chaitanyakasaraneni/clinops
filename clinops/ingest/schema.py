@@ -88,7 +88,10 @@ class ClinicalSchema:
             # Nullability check
             if not spec.nullable and col.isna().any():
                 null_count = col.isna().sum()
-                msg = f"[{self.name}] Column '{spec.name}' has {null_count} null values (nullable=False)"
+                msg = (
+                    f"[{self.name}] Column '{spec.name}' has "
+                    f"{null_count} null values (nullable=False)"
+                )
                 violations.append(msg)
                 if strict:
                     raise SchemaValidationError(msg)

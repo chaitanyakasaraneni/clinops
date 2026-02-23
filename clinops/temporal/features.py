@@ -66,10 +66,10 @@ class LagFeatureBuilder:
             for window in self.rolling_windows:
                 grouped = df.groupby(self.id_col)[col]
                 df[f"{col}_roll{window}_mean"] = grouped.transform(
-                    lambda s: s.rolling(window, min_periods=1).mean()
+                    lambda s, w=window: s.rolling(w, min_periods=1).mean()
                 )
                 df[f"{col}_roll{window}_std"] = grouped.transform(
-                    lambda s: s.rolling(window, min_periods=1).std()
+                    lambda s, w=window: s.rolling(w, min_periods=1).std()
                 )
 
         logger.info(f"Added {len(df.columns) - len(df.columns):,} lag/rolling features")

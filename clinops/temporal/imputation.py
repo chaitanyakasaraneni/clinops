@@ -10,14 +10,14 @@ tuned for clinical context.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 import pandas as pd
 from loguru import logger
 
 
-class ImputationStrategy(str, Enum):
+class ImputationStrategy(StrEnum):
     """
     Supported imputation strategies.
 
@@ -102,7 +102,7 @@ class Imputer:
         self.id_col = id_col
         self._fill_values: dict[str, float] = {}
 
-    def fit(self, df: pd.DataFrame) -> "Imputer":
+    def fit(self, df: pd.DataFrame) -> Imputer:
         """Compute imputation statistics from a reference DataFrame (training set)."""
         numeric_cols = df.select_dtypes(include=[np.number]).columns
         if self.strategy == ImputationStrategy.MEAN:

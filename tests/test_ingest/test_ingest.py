@@ -1,14 +1,11 @@
 """Tests for clinops.ingest module."""
-import pytest
+
 import pandas as pd
-import numpy as np
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+import pytest
 
-from clinops.ingest.schema import ClinicalSchema, ColumnSpec, SchemaValidationError
-from clinops.ingest.flat import FlatFileLoader
 from clinops.ingest.fhir import FHIRLoader
-
+from clinops.ingest.flat import FlatFileLoader
+from clinops.ingest.schema import ClinicalSchema, ColumnSpec, SchemaValidationError
 
 # ---------------------------------------------------------------------------
 # Schema validation tests
@@ -84,7 +81,11 @@ class TestClinicalSchema:
 class TestFlatFileLoader:
     def test_load_csv(self, tmp_path):
         csv_file = tmp_path / "test.csv"
-        csv_file.write_text("patient_id,heart_rate,charttime\n1,72,2023-01-01 08:00:00\n2,85,2023-01-01 09:00:00\n")
+        csv_file.write_text(
+            "patient_id,heart_rate,charttime\n"
+            "1,72,2023-01-01 08:00:00\n"
+            "2,85,2023-01-01 09:00:00\n"
+        )
         loader = FlatFileLoader(csv_file, id_col="patient_id")
         df = loader.load()
         assert len(df) == 2
@@ -131,8 +132,14 @@ class TestFHIRLoader:
         bundle = {
             "resourceType": "Bundle",
             "entry": [
-                {"resource": {"resourceType": "Patient", "id": "p1", "gender": "male", "birthDate": "1980-01-01"}},
-                {"resource": {"resourceType": "Patient", "id": "p2", "gender": "female", "birthDate": "1975-06-15"}},
+                {"resource": {
+                    "resourceType": "Patient", "id": "p1",
+                    "gender": "male", "birthDate": "1980-01-01",
+                }},
+                {"resource": {
+                    "resourceType": "Patient", "id": "p2",
+                    "gender": "female", "birthDate": "1975-06-15",
+                }},
             ]
         }
         bundle_file = tmp_path / "bundle.json"
@@ -150,7 +157,10 @@ class TestFHIRLoader:
                 {"resource": {
                     "resourceType": "Observation", "id": "o1",
                     "subject": {"reference": "Patient/p1"},
-                    "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}], "text": "Heart rate"},
+                    "code": {
+                        "coding": [{"system": "http://loinc.org", "code": "8867-4"}],
+                        "text": "Heart rate",
+                    },
                     "valueQuantity": {"value": 72.0, "unit": "/min"},
                     "effectiveDateTime": "2023-01-01T08:00:00Z",
                     "status": "final"

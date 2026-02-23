@@ -1,10 +1,17 @@
 """Tests for clinops.temporal module."""
-import pytest
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 
-from clinops.temporal import TemporalWindower, ImputationStrategy, Imputer, LagFeatureBuilder, CohortAligner
+import numpy as np
+import pandas as pd
+import pytest
+
+from clinops.temporal import (
+    CohortAligner,
+    ImputationStrategy,
+    Imputer,
+    LagFeatureBuilder,
+    TemporalWindower,
+)
 
 
 def make_vitals_df(n_patients=3, n_hours=48, freq_minutes=60) -> pd.DataFrame:

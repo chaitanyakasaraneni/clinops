@@ -8,8 +8,8 @@ fixed-size feature windows suitable for ML model training.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -194,16 +194,23 @@ class TemporalWindower:
                     window_start += step_td
                     continue
 
-                row = self._aggregate_window(window_df, feature_cols, subject_id, window_start, window_end, id_col)
+                row = self._aggregate_window(
+                    window_df, feature_cols, subject_id, window_start, window_end, id_col
+                )
                 results.append(row)
                 window_start += step_td
 
         if not results:
-            logger.warning("No windows extracted — check min_observations threshold or data coverage")
+            logger.warning(
+                "No windows extracted — check min_observations threshold or data coverage"
+            )
             return pd.DataFrame()
 
         result_df = pd.DataFrame(results)
-        logger.info(f"Extracted {len(result_df):,} windows across {result_df[id_col].nunique()} subjects")
+        logger.info(
+            f"Extracted {len(result_df):,} windows across "
+            f"{result_df[id_col].nunique()} subjects"
+        )
         return result_df
 
     # ------------------------------------------------------------------

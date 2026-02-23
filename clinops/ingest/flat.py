@@ -12,8 +12,7 @@ from pathlib import Path
 import pandas as pd
 from loguru import logger
 
-from clinops.ingest.schema import ClinicalSchema, SchemaValidationError
-
+from clinops.ingest.schema import ClinicalSchema
 
 _NULL_VALUES = ["", "NA", "N/A", "n/a", "nan", "NaN", "NULL", "null", "None", "UNKNOWN", "."]
 
