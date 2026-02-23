@@ -11,10 +11,12 @@ Supported sources:
 from clinops.ingest.fhir import FHIRLoader
 from clinops.ingest.flat import FlatFileLoader
 from clinops.ingest.mimic import MimicLoader
+from clinops.ingest.mimic_tables import MimicTableLoader
 from clinops.ingest.schema import ClinicalSchema, ColumnSpec, SchemaValidationError
 
 __all__ = [
     "MimicLoader",
+    "MimicTableLoader",
     "FHIRLoader",
     "FlatFileLoader",
     "ClinicalSchema",
