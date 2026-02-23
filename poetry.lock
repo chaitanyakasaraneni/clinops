@@ -2802,11 +2802,11 @@ dev = ["black (>=19.3b0) ; python_version >= \"3.6\"", "pytest (>=4.6.2)"]
 
 [extras]
 aws = ["boto3"]
-dev = ["black", "mkdocs", "mkdocs-material", "mkdocstrings", "mypy", "pandas-stubs", "pytest", "pytest-cov", "pytest-mock", "ruff"]
+dev = ["black", "mkdocs", "mkdocs-material", "mkdocstrings", "mypy", "pandas-stubs", "pydantic", "pytest", "pytest-cov", "pytest-mock", "ruff"]
 fhir = ["fhir.resources"]
 gcp = ["google-cloud-bigquery", "google-cloud-storage"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "896f832cbf72fa27abc63a00666224c1a6e4f8c2e4378b4d039649541614d1a6"
+content-hash = "4dc0d60c24dbfa4e8c04add91708d6e8a8202e41510785753197efc94f7ebb63"

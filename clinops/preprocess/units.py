@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
 from loguru import logger
@@ -155,7 +156,7 @@ class UnitNormalizer:
         self._column_unit_map = column_unit_map or {}
         self._explicit = explicit_conversions or {}
         self._target_units = {**_CANONICAL_UNITS, **(target_units or {})}
-        self._converted: list[dict] = []
+        self._converted: list[dict[str, Any]] = []
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """

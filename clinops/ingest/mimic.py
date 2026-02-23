@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from loguru import logger
-from pydantic import BaseModel, field_validator
 
 from clinops.ingest.schema import SchemaValidationError
 
@@ -30,39 +31,34 @@ from clinops.ingest.schema import SchemaValidationError
 
 _REQUIRED_COLS: dict[str, list[str]] = {
     "chartevents": ["subject_id", "hadm_id", "stay_id", "itemid", "charttime", "valuenum"],
-    "labevents": ["subject_id", "hadm_id", "itemid", "charttime", "valuenum", "valueuom"],
-    "admissions": ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
-    "patients": ["subject_id", "gender", "anchor_age", "anchor_year", "dod"],
+    "labevents":   ["subject_id", "hadm_id", "itemid", "charttime", "valuenum", "valueuom"],
+    "admissions":  ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
+    "patients":    ["subject_id", "gender", "anchor_age", "anchor_year", "dod"],
     "prescriptions": ["subject_id", "hadm_id", "starttime", "stoptime", "drug", "dose_val_rx"],
     "inputevents": [
-        "subject_id",
-        "hadm_id",
-        "stay_id",
-        "itemid",
-        "starttime",
-        "amount",
-        "amountuom",
+        "subject_id", "hadm_id", "stay_id", "itemid", "starttime", "amount", "amountuom",
     ],
-    "d_items": ["itemid", "label", "category"],
-    "d_labitems": ["itemid", "label", "fluid", "category"],
-    "icustays": ["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
+    "d_items":     ["itemid", "label", "category"],
+    "d_labitems":  ["itemid", "label", "fluid", "category"],
+    "icustays":    ["subject_id", "hadm_id", "stay_id", "intime", "outtime", "los"],
 }
 
 _TABLE_PATHS: dict[str, tuple[str, str]] = {
     # table_name: (module, filename_stem)
-    "chartevents": ("icu", "chartevents"),
-    "labevents": ("hosp", "labevents"),
-    "admissions": ("hosp", "admissions"),
-    "patients": ("hosp", "patients"),
+    "chartevents":   ("icu",  "chartevents"),
+    "labevents":     ("hosp", "labevents"),
+    "admissions":    ("hosp", "admissions"),
+    "patients":      ("hosp", "patients"),
     "prescriptions": ("hosp", "prescriptions"),
-    "inputevents": ("icu", "inputevents"),
-    "d_items": ("icu", "d_items"),
-    "d_labitems": ("hosp", "d_labitems"),
-    "icustays": ("icu", "icustays"),
+    "inputevents":   ("icu",  "inputevents"),
+    "d_items":       ("icu",  "d_items"),
+    "d_labitems":    ("hosp", "d_labitems"),
+    "icustays":      ("icu",  "icustays"),
 }
 
 
-class MimicLoaderConfig(BaseModel):
+@dataclass
+class MimicLoaderConfig:
     """Configuration for MimicLoader."""
 
     mimic_path: Path
@@ -70,12 +66,9 @@ class MimicLoaderConfig(BaseModel):
     strict_validation: bool = True
     chunk_size: int | None = None  # set for chunked reading on large tables
 
-    @field_validator("mimic_path")
-    @classmethod
-    def path_must_exist(cls, v: Path) -> Path:
-        if not v.exists():
-            raise ValueError(f"MIMIC path does not exist: {v}")
-        return v
+    def __post_init__(self) -> None:
+        if not self.mimic_path.exists():
+            raise ValueError(f"MIMIC path does not exist: {self.mimic_path}")
 
 
 class MimicLoader:
@@ -255,7 +248,7 @@ class MimicLoader:
         path = self._resolve_table_path(table_name)
         logger.debug(f"Loading {table_name} from {path}")
 
-        read_kwargs: dict = {}
+        read_kwargs: dict[str, Any] = {}
         if self._cfg.chunk_size:
             read_kwargs["chunksize"] = self._cfg.chunk_size
 

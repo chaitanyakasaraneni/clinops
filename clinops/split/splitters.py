@@ -20,7 +20,9 @@ All three splitters here address one or more of these problems.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -44,7 +46,7 @@ class SplitResult:
 
     train: pd.DataFrame
     test: pd.DataFrame
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def train_size(self) -> int:
@@ -299,7 +301,7 @@ class StratifiedPatientSplitter:
         id_col: str = "subject_id",
         outcome_col: str = "mortality",
         test_size: float = 0.2,
-        patient_outcome_fn: object = None,
+        patient_outcome_fn: Callable[[pd.Series], int] | None = None,
         random_state: int = 42,
     ) -> None:
         if not 0 < test_size < 1:
@@ -307,7 +309,9 @@ class StratifiedPatientSplitter:
         self.id_col = id_col
         self.outcome_col = outcome_col
         self.test_size = test_size
-        self._outcome_fn = patient_outcome_fn or (lambda s: int(s.max()))
+        self._outcome_fn: Callable[[pd.Series], int] = patient_outcome_fn or (
+            lambda s: int(s.max())
+        )
         self.random_state = random_state
 
     def split(self, df: pd.DataFrame) -> SplitResult:
@@ -331,12 +335,14 @@ class StratifiedPatientSplitter:
 
         # Derive per-patient outcome label
         patient_labels = (
-            df.groupby(self.id_col)[self.outcome_col].apply(self._outcome_fn).reset_index()
+            df.groupby(self.id_col)[self.outcome_col]
+            .apply(lambda s: self._outcome_fn(s))
+            .reset_index()
         )
         patient_labels.columns = [self.id_col, "_label"]
 
-        positives = patient_labels[patient_labels["_label"] == 1][self.id_col].values
-        negatives = patient_labels[patient_labels["_label"] == 0][self.id_col].values
+        positives = patient_labels[patient_labels["_label"] == 1][self.id_col].to_numpy()
+        negatives = patient_labels[patient_labels["_label"] == 0][self.id_col].to_numpy()
 
         n_pos_test = max(1, round(len(positives) * self.test_size))
         n_neg_test = max(1, round(len(negatives) * self.test_size))

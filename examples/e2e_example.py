@@ -19,7 +19,6 @@ import pandas as pd
 
 from clinops.ingest import ClinicalSchema, ColumnSpec, FlatFileLoader, MimicTableLoader
 from clinops.preprocess import ClinicalOutlierClipper, ICDMapper, UnitNormalizer
-from clinops.preprocess.units import UNIT_CONVERSIONS
 from clinops.split import PatientSplitter, StratifiedPatientSplitter, TemporalSplitter
 from clinops.temporal import (
     CohortAligner,

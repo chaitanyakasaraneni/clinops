@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -50,9 +51,9 @@ class WindowConfig:
     step_hours: float = 6.0
     min_observations: int = 1
     imputation: ImputationStrategy = ImputationStrategy.FORWARD_FILL
-    aggregations: dict[str, str | Callable] = field(default_factory=dict)
+    aggregations: dict[str, str | Callable[..., Any]] = field(default_factory=dict)
     label_col: str | None = None
-    label_fn: Callable | None = None
+    label_fn: Callable[..., Any] | None = None
 
 
 class TemporalWindower:
@@ -97,9 +98,9 @@ class TemporalWindower:
         step_hours: float = 6.0,
         imputation: ImputationStrategy = ImputationStrategy.FORWARD_FILL,
         min_observations: int = 1,
-        aggregations: dict[str, str | Callable] | None = None,
+        aggregations: dict[str, str | Callable[..., Any]] | None = None,
         label_col: str | None = None,
-        label_fn: Callable | None = None,
+        label_fn: Callable[..., Any] | None = None,
     ) -> None:
         self.config = WindowConfig(
             window_hours=window_hours,
@@ -209,8 +210,7 @@ class TemporalWindower:
 
         result_df = pd.DataFrame(results)
         logger.info(
-            f"Extracted {len(result_df):,} windows across "
-            f"{result_df[id_col].nunique()} subjects"
+            f"Extracted {len(result_df):,} windows across {result_df[id_col].nunique()} subjects"
         )
         return result_df
 
@@ -226,8 +226,8 @@ class TemporalWindower:
         window_start: pd.Timestamp,
         window_end: pd.Timestamp,
         id_col: str,
-    ) -> dict:
-        row: dict = {
+    ) -> dict[str, Any]:
+        row: dict[str, Any] = {
             id_col: subject_id,
             "window_start": window_start,
             "window_end": window_end,

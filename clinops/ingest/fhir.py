@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 from loguru import logger
@@ -124,9 +124,9 @@ class FHIRLoader:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _load_resources(self, resource_type: str) -> list[dict]:
+    def _load_resources(self, resource_type: str) -> list[dict[str, Any]]:
         """Load all resources of a given type from the source."""
-        resources: list[dict] = []
+        resources: list[dict[str, Any]] = []
 
         if self._source.is_dir():
             for fp in self._source.glob("*.json"):
@@ -141,7 +141,7 @@ class FHIRLoader:
         logger.debug(f"Loaded {len(resources)} {resource_type} resources")
         return resources
 
-    def _parse_file(self, path: Path, resource_type: str) -> list[dict]:
+    def _parse_file(self, path: Path, resource_type: str) -> list[dict[str, Any]]:
         with open(path) as f:
             data = json.load(f)
         if data.get("resourceType") == "Bundle":
@@ -154,7 +154,7 @@ class FHIRLoader:
             return [data]
         return []
 
-    def _parse_ndjson(self, path: Path, resource_type: str) -> list[dict]:
+    def _parse_ndjson(self, path: Path, resource_type: str) -> list[dict[str, Any]]:
         records = []
         with open(path) as f:
             for line in f:

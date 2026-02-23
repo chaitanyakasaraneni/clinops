@@ -24,6 +24,7 @@ Circulation, 101(23), e215–e220.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -146,7 +147,7 @@ class ClinicalOutlierClipper:
 
         self.action = action
         self.strict = strict
-        self._report: list[dict] = []
+        self._report: list[dict[str, Any]] = []
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """

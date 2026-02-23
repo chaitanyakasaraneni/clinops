@@ -110,12 +110,12 @@ class Imputer:
                 # store per-patient means — used in transform
                 self._patient_means = df.groupby(self.id_col)[numeric_cols].mean()
             else:
-                self._fill_values = df[numeric_cols].mean().to_dict()
+                self._fill_values = {str(k): float(v) for k, v in df[numeric_cols].mean().items()}
         elif self.strategy == ImputationStrategy.MEDIAN:
             if self.per_patient and self.id_col:
                 self._patient_medians = df.groupby(self.id_col)[numeric_cols].median()
             else:
-                self._fill_values = df[numeric_cols].median().to_dict()
+                self._fill_values = {str(k): float(v) for k, v in df[numeric_cols].median().items()}
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -180,15 +180,14 @@ class Imputer:
         """
         if self.time_col not in df.columns:
             return df
+        assert self.max_gap_hours is not None
         time = pd.to_datetime(df[self.time_col])
         gap_hours = time.diff().dt.total_seconds() / 3600
 
         for col in numeric_cols:
             original_null = df[col].copy()
-            if forward:
-                large_gap = gap_hours > self.max_gap_hours
-            else:
-                large_gap = gap_hours.shift(-1).fillna(0) > self.max_gap_hours
+            max_gap = self.max_gap_hours
+            large_gap = gap_hours > max_gap if forward else gap_hours.shift(-1).fillna(0) > max_gap
             # Mask filled values that crossed a large gap
             was_null_before_fill = original_null.isna()
             df.loc[was_null_before_fill & large_gap, col] = np.nan
