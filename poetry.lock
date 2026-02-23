@@ -2809,4 +2809,4 @@ gcp = ["google-cloud-bigquery", "google-cloud-storage"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "4dc0d60c24dbfa4e8c04add91708d6e8a8202e41510785753197efc94f7ebb63"
+content-hash = "54b2daec36249ebc0018d166e4a7103d5f67a1a14ebbd9075488ddf4d394b614"
