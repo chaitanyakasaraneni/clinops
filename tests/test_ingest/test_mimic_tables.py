@@ -16,6 +16,7 @@ from clinops.ingest.mimic_tables import MimicTableLoader
 # Fixtures — minimal CSV files that satisfy each schema
 # ---------------------------------------------------------------------------
 
+
 def _write_csvs(tmp_path):
     hosp = tmp_path / "hosp"
     icu = tmp_path / "icu"
@@ -83,6 +84,7 @@ def loader(mimic_dir):
 # chartevents
 # ---------------------------------------------------------------------------
 
+
 class TestChartevents:
     def test_loads_all_rows(self, loader):
         df = loader.chartevents()
@@ -106,6 +108,7 @@ class TestChartevents:
 # ---------------------------------------------------------------------------
 # labevents
 # ---------------------------------------------------------------------------
+
 
 class TestLabevents:
     def test_loads_rows(self, loader):
@@ -132,6 +135,7 @@ class TestLabevents:
 # admissions
 # ---------------------------------------------------------------------------
 
+
 class TestAdmissions:
     def test_loads_rows(self, loader):
         df = loader.admissions()
@@ -151,6 +155,7 @@ class TestAdmissions:
 # ---------------------------------------------------------------------------
 # diagnoses_icd
 # ---------------------------------------------------------------------------
+
 
 class TestDiagnosesIcd:
     def test_loads_all_rows(self, loader):
@@ -182,6 +187,7 @@ class TestDiagnosesIcd:
 # icustays
 # ---------------------------------------------------------------------------
 
+
 class TestIcustays:
     def test_loads_rows(self, loader):
         df = loader.icustays()
@@ -210,6 +216,7 @@ class TestIcustays:
 # summary()
 # ---------------------------------------------------------------------------
 
+
 class TestSummary:
     def test_summary_returns_dataframe(self, loader):
         result = loader.summary()
@@ -221,5 +228,9 @@ class TestSummary:
     def test_summary_covers_all_tables(self, loader):
         result = loader.summary()
         assert set(result["table"]) == {
-            "chartevents", "labevents", "admissions", "diagnoses_icd", "icustays"
+            "chartevents",
+            "labevents",
+            "admissions",
+            "diagnoses_icd",
+            "icustays",
         }

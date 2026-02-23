@@ -131,8 +131,7 @@ class FlatFileLoader:
         else:
             # Auto-detect: columns with "time", "date", or "dt" in name
             target_cols = [
-                c for c in df.columns
-                if any(kw in c for kw in ["time", "date", "_dt", "ts", "_at"])
+                c for c in df.columns if any(kw in c for kw in ["time", "date", "_dt", "ts", "_at"])
             ]
 
         for col in target_cols:

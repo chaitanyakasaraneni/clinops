@@ -11,11 +11,11 @@ from clinops.ingest.schema import ClinicalSchema, ColumnSpec, SchemaValidationEr
 # Schema validation tests
 # ---------------------------------------------------------------------------
 
+
 class TestClinicalSchema:
     def test_valid_df_passes(self):
         schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("subject_id", nullable=False), ColumnSpec("value")]
+            name="test", columns=[ColumnSpec("subject_id", nullable=False), ColumnSpec("value")]
         )
         df = pd.DataFrame({"subject_id": [1, 2], "value": [10.0, 20.0]})
         violations = schema.validate(df, strict=False)
@@ -23,8 +23,7 @@ class TestClinicalSchema:
 
     def test_missing_column_raises_strict(self):
         schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("subject_id"), ColumnSpec("missing_col")]
+            name="test", columns=[ColumnSpec("subject_id"), ColumnSpec("missing_col")]
         )
         df = pd.DataFrame({"subject_id": [1, 2]})
         with pytest.raises(SchemaValidationError, match="missing_col"):
@@ -32,8 +31,7 @@ class TestClinicalSchema:
 
     def test_missing_column_returns_violation_non_strict(self):
         schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("subject_id"), ColumnSpec("missing_col")]
+            name="test", columns=[ColumnSpec("subject_id"), ColumnSpec("missing_col")]
         )
         df = pd.DataFrame({"subject_id": [1, 2]})
         violations = schema.validate(df, strict=False)
@@ -41,18 +39,14 @@ class TestClinicalSchema:
         assert "missing_col" in violations[0]
 
     def test_null_check(self):
-        schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("subject_id", nullable=False)]
-        )
+        schema = ClinicalSchema(name="test", columns=[ColumnSpec("subject_id", nullable=False)])
         df = pd.DataFrame({"subject_id": [1, None]})
         violations = schema.validate(df, strict=False)
         assert any("null" in v.lower() for v in violations)
 
     def test_range_check_below_min(self):
         schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("heart_rate", min_value=0, max_value=300)]
+            name="test", columns=[ColumnSpec("heart_rate", min_value=0, max_value=300)]
         )
         df = pd.DataFrame({"heart_rate": [-5.0, 70.0, 80.0]})
         violations = schema.validate(df, strict=False)
@@ -60,8 +54,7 @@ class TestClinicalSchema:
 
     def test_allowed_values_check(self):
         schema = ClinicalSchema(
-            name="test",
-            columns=[ColumnSpec("gender", allowed_values=["M", "F"])]
+            name="test", columns=[ColumnSpec("gender", allowed_values=["M", "F"])]
         )
         df = pd.DataFrame({"gender": ["M", "F", "X"]})
         violations = schema.validate(df, strict=False)
@@ -77,6 +70,7 @@ class TestClinicalSchema:
 # ---------------------------------------------------------------------------
 # FlatFileLoader tests
 # ---------------------------------------------------------------------------
+
 
 class TestFlatFileLoader:
     def test_load_csv(self, tmp_path):
@@ -126,21 +120,31 @@ class TestFlatFileLoader:
 # FHIRLoader tests
 # ---------------------------------------------------------------------------
 
+
 class TestFHIRLoader:
     def test_load_bundle(self, tmp_path):
         import json
+
         bundle = {
             "resourceType": "Bundle",
             "entry": [
-                {"resource": {
-                    "resourceType": "Patient", "id": "p1",
-                    "gender": "male", "birthDate": "1980-01-01",
-                }},
-                {"resource": {
-                    "resourceType": "Patient", "id": "p2",
-                    "gender": "female", "birthDate": "1975-06-15",
-                }},
-            ]
+                {
+                    "resource": {
+                        "resourceType": "Patient",
+                        "id": "p1",
+                        "gender": "male",
+                        "birthDate": "1980-01-01",
+                    }
+                },
+                {
+                    "resource": {
+                        "resourceType": "Patient",
+                        "id": "p2",
+                        "gender": "female",
+                        "birthDate": "1975-06-15",
+                    }
+                },
+            ],
         }
         bundle_file = tmp_path / "bundle.json"
         bundle_file.write_text(json.dumps(bundle))
@@ -151,21 +155,25 @@ class TestFHIRLoader:
 
     def test_load_observations(self, tmp_path):
         import json
+
         bundle = {
             "resourceType": "Bundle",
             "entry": [
-                {"resource": {
-                    "resourceType": "Observation", "id": "o1",
-                    "subject": {"reference": "Patient/p1"},
-                    "code": {
-                        "coding": [{"system": "http://loinc.org", "code": "8867-4"}],
-                        "text": "Heart rate",
-                    },
-                    "valueQuantity": {"value": 72.0, "unit": "/min"},
-                    "effectiveDateTime": "2023-01-01T08:00:00Z",
-                    "status": "final"
-                }}
-            ]
+                {
+                    "resource": {
+                        "resourceType": "Observation",
+                        "id": "o1",
+                        "subject": {"reference": "Patient/p1"},
+                        "code": {
+                            "coding": [{"system": "http://loinc.org", "code": "8867-4"}],
+                            "text": "Heart rate",
+                        },
+                        "valueQuantity": {"value": 72.0, "unit": "/min"},
+                        "effectiveDateTime": "2023-01-01T08:00:00Z",
+                        "status": "final",
+                    }
+                }
+            ],
         }
         obs_file = tmp_path / "obs.json"
         obs_file.write_text(json.dumps(bundle))

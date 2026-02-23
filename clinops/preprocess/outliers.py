@@ -183,16 +183,18 @@ class ClinicalOutlierClipper:
             if n_low == 0 and n_high == 0:
                 continue
 
-            self._report.append({
-                "column": col,
-                "low_outliers": n_low,
-                "high_outliers": n_high,
-                "total_outliers": n_low + n_high,
-                "pct_outliers": round(100 * (n_low + n_high) / len(series), 3),
-                "bound_low": spec.low,
-                "bound_high": spec.high,
-                "unit": spec.unit,
-            })
+            self._report.append(
+                {
+                    "column": col,
+                    "low_outliers": n_low,
+                    "high_outliers": n_high,
+                    "total_outliers": n_low + n_high,
+                    "pct_outliers": round(100 * (n_low + n_high) / len(series), 3),
+                    "bound_low": spec.low,
+                    "bound_high": spec.high,
+                    "unit": spec.unit,
+                }
+            )
 
             logger.debug(
                 f"{col}: {n_low} below {spec.low}{spec.unit}, "
@@ -225,10 +227,18 @@ class ClinicalOutlierClipper:
         or no outliers were detected.
         """
         if not self._report:
-            return pd.DataFrame(columns=[
-                "column", "low_outliers", "high_outliers",
-                "total_outliers", "pct_outliers", "bound_low", "bound_high", "unit",
-            ])
+            return pd.DataFrame(
+                columns=[
+                    "column",
+                    "low_outliers",
+                    "high_outliers",
+                    "total_outliers",
+                    "pct_outliers",
+                    "bound_low",
+                    "bound_high",
+                    "unit",
+                ]
+            )
         return pd.DataFrame(self._report).sort_values("total_outliers", ascending=False)
 
     def add_bounds(self, col: str, low: float, high: float, unit: str = "") -> None:

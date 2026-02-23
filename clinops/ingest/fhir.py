@@ -48,12 +48,14 @@ class FHIRLoader:
         records = self._load_resources("Patient")
         rows = []
         for r in records:
-            rows.append({
-                "patient_id": r.get("id"),
-                "gender": r.get("gender"),
-                "birth_date": r.get("birthDate"),
-                "deceased": r.get("deceasedBoolean", False),
-            })
+            rows.append(
+                {
+                    "patient_id": r.get("id"),
+                    "gender": r.get("gender"),
+                    "birth_date": r.get("birthDate"),
+                    "deceased": r.get("deceasedBoolean", False),
+                }
+            )
         return pd.DataFrame(rows)
 
     def observations(
@@ -80,16 +82,18 @@ class FHIRLoader:
                 (c["code"] for c in codings if "loinc" in c.get("system", "").lower()), None
             )
             value = r.get("valueQuantity", {})
-            rows.append({
-                "observation_id": r.get("id"),
-                "patient_id": r.get("subject", {}).get("reference", "").split("/")[-1],
-                "loinc_code": loinc,
-                "display": code_obj.get("text"),
-                "value": value.get("value"),
-                "unit": value.get("unit"),
-                "effective_time": r.get("effectiveDateTime"),
-                "status": r.get("status"),
-            })
+            rows.append(
+                {
+                    "observation_id": r.get("id"),
+                    "patient_id": r.get("subject", {}).get("reference", "").split("/")[-1],
+                    "loinc_code": loinc,
+                    "display": code_obj.get("text"),
+                    "value": value.get("value"),
+                    "unit": value.get("unit"),
+                    "effective_time": r.get("effectiveDateTime"),
+                    "status": r.get("status"),
+                }
+            )
         df = pd.DataFrame(rows)
         if loinc_codes:
             df = df[df["loinc_code"].isin(loinc_codes)]
@@ -101,15 +105,19 @@ class FHIRLoader:
         rows = []
         for r in records:
             codings = r.get("code", {}).get("coding", [])
-            rows.append({
-                "condition_id": r.get("id"),
-                "patient_id": r.get("subject", {}).get("reference", "").split("/")[-1],
-                "code": codings[0].get("code") if codings else None,
-                "system": codings[0].get("system") if codings else None,
-                "display": codings[0].get("display") if codings else None,
-                "clinical_status": r.get("clinicalStatus", {}).get("coding", [{}])[0].get("code"),
-                "onset": r.get("onsetDateTime"),
-            })
+            rows.append(
+                {
+                    "condition_id": r.get("id"),
+                    "patient_id": r.get("subject", {}).get("reference", "").split("/")[-1],
+                    "code": codings[0].get("code") if codings else None,
+                    "system": codings[0].get("system") if codings else None,
+                    "display": codings[0].get("display") if codings else None,
+                    "clinical_status": r.get("clinicalStatus", {})
+                    .get("coding", [{}])[0]
+                    .get("code"),
+                    "onset": r.get("onsetDateTime"),
+                }
+            )
         return pd.DataFrame(rows)
 
     # ------------------------------------------------------------------

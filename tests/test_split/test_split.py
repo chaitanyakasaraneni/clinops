@@ -17,17 +17,20 @@ from clinops.split import (
 # Fixtures
 # -----------------------------------------------------------------------
 
+
 @pytest.fixture
 def temporal_df() -> pd.DataFrame:
     """50 rows spanning 2 years with a binary outcome."""
     rng = np.random.default_rng(0)
     dates = pd.date_range("2150-01-01", periods=50, freq="W")
-    return pd.DataFrame({
-        "subject_id": rng.integers(1, 20, size=50),
-        "charttime": dates,
-        "heart_rate": rng.normal(80, 15, 50),
-        "outcome": rng.integers(0, 2, size=50),
-    })
+    return pd.DataFrame(
+        {
+            "subject_id": rng.integers(1, 20, size=50),
+            "charttime": dates,
+            "heart_rate": rng.normal(80, 15, 50),
+            "outcome": rng.integers(0, 2, size=50),
+        }
+    )
 
 
 @pytest.fixture
@@ -35,11 +38,13 @@ def patient_df() -> pd.DataFrame:
     """100 rows, 20 unique patients, 5 rows each."""
     rng = np.random.default_rng(1)
     patients = np.repeat(np.arange(1, 21), 5)
-    return pd.DataFrame({
-        "subject_id": patients,
-        "value": rng.normal(0, 1, 100),
-        "outcome": rng.integers(0, 2, size=100),
-    })
+    return pd.DataFrame(
+        {
+            "subject_id": patients,
+            "value": rng.normal(0, 1, 100),
+            "outcome": rng.integers(0, 2, size=100),
+        }
+    )
 
 
 @pytest.fixture
@@ -56,6 +61,7 @@ def stratified_df() -> pd.DataFrame:
 # -----------------------------------------------------------------------
 # SplitResult
 # -----------------------------------------------------------------------
+
 
 class TestSplitResult:
 
@@ -85,6 +91,7 @@ class TestSplitResult:
 # -----------------------------------------------------------------------
 # TemporalSplitter
 # -----------------------------------------------------------------------
+
 
 class TestTemporalSplitter:
 
@@ -135,6 +142,7 @@ class TestTemporalSplitter:
 # PatientSplitter
 # -----------------------------------------------------------------------
 
+
 class TestPatientSplitter:
 
     def test_no_patient_leakage(self, patient_df):
@@ -147,9 +155,7 @@ class TestPatientSplitter:
     def test_all_patients_accounted_for(self, patient_df):
         splitter = PatientSplitter(id_col="subject_id", test_size=0.2)
         result = splitter.split(patient_df)
-        all_patients_in = (
-            set(result.train["subject_id"]) | set(result.test["subject_id"])
-        )
+        all_patients_in = set(result.train["subject_id"]) | set(result.test["subject_id"])
         all_patients_orig = set(patient_df["subject_id"])
         assert all_patients_in == all_patients_orig
 
@@ -196,6 +202,7 @@ class TestPatientSplitter:
 # StratifiedPatientSplitter
 # -----------------------------------------------------------------------
 
+
 class TestStratifiedPatientSplitter:
 
     def test_no_patient_leakage(self, stratified_df):
@@ -208,9 +215,7 @@ class TestStratifiedPatientSplitter:
         assert train_patients.isdisjoint(test_patients)
 
     def test_all_rows_accounted_for(self, stratified_df):
-        splitter = StratifiedPatientSplitter(
-            id_col="subject_id", outcome_col="outcome"
-        )
+        splitter = StratifiedPatientSplitter(id_col="subject_id", outcome_col="outcome")
         result = splitter.split(stratified_df)
         assert result.train_size + result.test_size == len(stratified_df)
 
@@ -226,9 +231,7 @@ class TestStratifiedPatientSplitter:
         assert abs(test_rate - pop_rate) < 0.10
 
     def test_metadata_contains_outcome_rates(self, stratified_df):
-        splitter = StratifiedPatientSplitter(
-            id_col="subject_id", outcome_col="outcome"
-        )
+        splitter = StratifiedPatientSplitter(id_col="subject_id", outcome_col="outcome")
         result = splitter.split(stratified_df)
         assert "population_outcome_rate" in result.metadata
         assert "train_outcome_rate" in result.metadata
@@ -253,9 +256,7 @@ class TestStratifiedPatientSplitter:
         assert set(s1.test["subject_id"]) == set(s2.test["subject_id"])
 
     def test_summary_includes_outcome_rates(self, stratified_df):
-        splitter = StratifiedPatientSplitter(
-            id_col="subject_id", outcome_col="outcome"
-        )
+        splitter = StratifiedPatientSplitter(id_col="subject_id", outcome_col="outcome")
         result = splitter.split(stratified_df)
         summary = result.summary()
         assert "outcome_rate" in summary

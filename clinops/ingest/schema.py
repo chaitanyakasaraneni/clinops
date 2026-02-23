@@ -12,14 +12,16 @@ import pandas as pd
 
 class SchemaValidationError(ValueError):
     """Raised when a loaded table does not match the expected schema."""
+
     pass
 
 
 @dataclass
 class ColumnSpec:
     """Specification for a single column in a clinical table."""
+
     name: str
-    dtype: str | None = None          # e.g. "int64", "float64", "datetime64[ns]"
+    dtype: str | None = None  # e.g. "int64", "float64", "datetime64[ns]"
     nullable: bool = True
     min_value: float | None = None
     max_value: float | None = None

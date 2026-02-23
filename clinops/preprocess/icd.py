@@ -35,6 +35,7 @@ from loguru import logger
 
 class ICDVersion(StrEnum):
     """ICD coding version."""
+
     ICD9 = "icd9"
     ICD10 = "icd10"
 
@@ -75,69 +76,69 @@ _BUILTIN_MAPPINGS: list[tuple[str, str, str]] = [
     ("41401", "I2510", "Coronary artery disease, native vessel"),
     ("41071", "I2101", "STEMI anterior wall"),
     ("41401", "I2510", "Atherosclerotic heart disease"),
-    ("4280",  "I509",  "Heart failure, unspecified"),
+    ("4280", "I509", "Heart failure, unspecified"),
     ("42731", "I4891", "Atrial fibrillation"),
     ("42732", "I4892", "Atrial flutter"),
-    ("4275",  "I490",  "Ventricular fibrillation"),
-    ("4271",  "I471",  "Supraventricular tachycardia"),
-    ("4010",  "I10",   "Essential hypertension"),
-    ("4011",  "I10",   "Benign essential hypertension"),
-    ("4019",  "I10",   "Unspecified essential hypertension"),
+    ("4275", "I490", "Ventricular fibrillation"),
+    ("4271", "I471", "Supraventricular tachycardia"),
+    ("4010", "I10", "Essential hypertension"),
+    ("4011", "I10", "Benign essential hypertension"),
+    ("4019", "I10", "Unspecified essential hypertension"),
     ("43491", "I6350", "Cerebral artery occlusion, unspecified"),
     ("43401", "I6350", "Cerebral thrombosis"),
-    ("4439",  "I739",  "Peripheral vascular disease, unspecified"),
-    ("4160",  "I270",  "Primary pulmonary hypertension"),
+    ("4439", "I739", "Peripheral vascular disease, unspecified"),
+    ("4160", "I270", "Primary pulmonary hypertension"),
     # Respiratory
-    ("4660",  "J069",  "Acute upper respiratory infection"),
-    ("486",   "J189",  "Pneumonia, unspecified organism"),
-    ("4870",  "J111",  "Influenza with pneumonia"),
-    ("49390", "J459",  "Asthma, unspecified"),
-    ("49121", "J441",  "COPD with acute exacerbation"),
-    ("5185",  "J9600", "Acute respiratory failure"),
+    ("4660", "J069", "Acute upper respiratory infection"),
+    ("486", "J189", "Pneumonia, unspecified organism"),
+    ("4870", "J111", "Influenza with pneumonia"),
+    ("49390", "J459", "Asthma, unspecified"),
+    ("49121", "J441", "COPD with acute exacerbation"),
+    ("5185", "J9600", "Acute respiratory failure"),
     ("51881", "J9601", "Acute respiratory failure with hypoxia"),
     ("51882", "J9602", "Acute respiratory failure with hypercapnia"),
     # Gastrointestinal
-    ("53500", "K259",  "Gastric ulcer, unspecified"),
-    ("53100", "K269",  "Duodenal ulcer, unspecified"),
+    ("53500", "K259", "Gastric ulcer, unspecified"),
+    ("53100", "K269", "Duodenal ulcer, unspecified"),
     ("57400", "K8000", "Calculus of gallbladder with acute cholecystitis"),
-    ("5770",  "K859",  "Acute pancreatitis"),
-    ("5771",  "K860",  "Chronic pancreatitis due to alcohol"),
+    ("5770", "K859", "Acute pancreatitis"),
+    ("5771", "K860", "Chronic pancreatitis due to alcohol"),
     ("56081", "K5700", "Diverticulitis of small intestine"),
     # Renal
-    ("5849",  "N179",  "Acute kidney failure, unspecified"),
-    ("5854",  "N184",  "Chronic kidney disease, stage 4"),
-    ("5856",  "N186",  "End-stage renal disease"),
+    ("5849", "N179", "Acute kidney failure, unspecified"),
+    ("5854", "N184", "Chronic kidney disease, stage 4"),
+    ("5856", "N186", "End-stage renal disease"),
     # Endocrine / metabolic
-    ("25000", "E119",  "Type 2 diabetes mellitus without complications"),
-    ("25001", "E109",  "Type 1 diabetes mellitus without complications"),
-    ("25010", "E119",  "Type 2 DM with ketoacidosis"),
+    ("25000", "E119", "Type 2 diabetes mellitus without complications"),
+    ("25001", "E109", "Type 1 diabetes mellitus without complications"),
+    ("25010", "E119", "Type 2 DM with ketoacidosis"),
     ("25011", "E1010", "Type 1 DM with ketoacidosis without coma"),
-    ("2720",  "E7800", "Pure hypercholesterolaemia"),
-    ("2724",  "E785",  "Hyperlipidaemia, unspecified"),
-    ("2449",  "E039",  "Hypothyroidism, unspecified"),
-    ("2420",  "E050",  "Thyrotoxicosis with diffuse goitre"),
+    ("2720", "E7800", "Pure hypercholesterolaemia"),
+    ("2724", "E785", "Hyperlipidaemia, unspecified"),
+    ("2449", "E039", "Hypothyroidism, unspecified"),
+    ("2420", "E050", "Thyrotoxicosis with diffuse goitre"),
     # Infectious
-    ("0389",  "A419",  "Sepsis, unspecified"),
+    ("0389", "A419", "Sepsis, unspecified"),
     ("99591", "R6520", "Severe sepsis without septic shock"),
     ("99592", "R6521", "Severe sepsis with septic shock"),
-    ("0369",  "A399",  "Meningococcal infection, unspecified"),
-    ("3200",  "G000",  "Haemophilus meningitis"),
+    ("0369", "A399", "Meningococcal infection, unspecified"),
+    ("3200", "G000", "Haemophilus meningitis"),
     # Neurological
-    ("4340",  "I6630", "Cerebral thrombosis, MCA"),
+    ("4340", "I6630", "Cerebral thrombosis, MCA"),
     ("43410", "I6630", "Middle cerebral artery occlusion"),
-    ("2780",  "E669",  "Obesity, unspecified"),
-    ("29590", "F299",  "Unspecified psychosis"),
-    ("2960",  "F310",  "Bipolar disorder, manic episode"),
-    ("3119",  "F329",  "Depressive disorder"),
+    ("2780", "E669", "Obesity, unspecified"),
+    ("29590", "F299", "Unspecified psychosis"),
+    ("2960", "F310", "Bipolar disorder, manic episode"),
+    ("3119", "F329", "Depressive disorder"),
     # Haematology / oncology
     ("20500", "C9100", "Acute lymphoblastic leukaemia, not in remission"),
     ("20520", "C9200", "Acute myeloid leukaemia, not in remission"),
     ("20300", "C9000", "Multiple myeloma"),
-    ("28261", "D571",  "Sickle-cell anaemia without crisis"),
-    ("2851",  "D649",  "Anaemia, unspecified"),
-    ("2859",  "D649",  "Anaemia, unspecified"),
+    ("28261", "D571", "Sickle-cell anaemia without crisis"),
+    ("2851", "D649", "Anaemia, unspecified"),
+    ("2859", "D649", "Anaemia, unspecified"),
     # Trauma / injury
-    ("8050",  "S1200", "Fracture of cervical vertebra"),
+    ("8050", "S1200", "Fracture of cervical vertebra"),
     ("82000", "S7200", "Fracture of femoral neck"),
     ("85000", "S0990", "Concussion, unspecified"),
     # Procedures / Z codes
@@ -333,9 +334,7 @@ class ICDMapper:
 
     def describe(self, icd9_code: str) -> str:
         """Return the description for an ICD-9 code."""
-        return self._descriptions.get(
-            self._normalize_code(icd9_code), "No description available"
-        )
+        return self._descriptions.get(self._normalize_code(icd9_code), "No description available")
 
     @property
     def n_mappings(self) -> int:

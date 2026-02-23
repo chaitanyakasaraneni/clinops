@@ -20,37 +20,45 @@ from clinops.preprocess.units import (
 # Fixtures
 # -----------------------------------------------------------------------
 
+
 @pytest.fixture
 def vitals_df() -> pd.DataFrame:
-    return pd.DataFrame({
-        "subject_id": [1, 2, 3, 4, 5],
-        "heart_rate": [75.0, 301.0, 0.0, 120.0, -5.0],   # 301 and -5 are outliers
-        "spo2":       [98.0, 102.0, 95.0, 49.0, 97.0],    # 102 and 49 are outliers
-        "temperature": [37.0, 45.5, 36.5, 24.0, 38.2],    # 45.5 and 24.0 are outliers
-    })
+    return pd.DataFrame(
+        {
+            "subject_id": [1, 2, 3, 4, 5],
+            "heart_rate": [75.0, 301.0, 0.0, 120.0, -5.0],  # 301 and -5 are outliers
+            "spo2": [98.0, 102.0, 95.0, 49.0, 97.0],  # 102 and 49 are outliers
+            "temperature": [37.0, 45.5, 36.5, 24.0, 38.2],  # 45.5 and 24.0 are outliers
+        }
+    )
 
 
 @pytest.fixture
 def glucose_df() -> pd.DataFrame:
-    return pd.DataFrame({
-        "subject_id": [1, 2, 3, 4],
-        "glucose":    [126.0, 5.5, 180.0, 7.2],
-        "glucose_unit": ["mg/dL", "mmol/L", "mg/dL", "mmol/L"],
-    })
+    return pd.DataFrame(
+        {
+            "subject_id": [1, 2, 3, 4],
+            "glucose": [126.0, 5.5, 180.0, 7.2],
+            "glucose_unit": ["mg/dL", "mmol/L", "mg/dL", "mmol/L"],
+        }
+    )
 
 
 @pytest.fixture
 def icd_df() -> pd.DataFrame:
-    return pd.DataFrame({
-        "subject_id":  [1, 2, 3, 4, 5],
-        "icd_code":    ["41401", "4280", "42731", "I10", "49121"],
-        "icd_version": ["9", "9", "9", "10", "9"],
-    })
+    return pd.DataFrame(
+        {
+            "subject_id": [1, 2, 3, 4, 5],
+            "icd_code": ["41401", "4280", "42731", "I10", "49121"],
+            "icd_version": ["9", "9", "9", "10", "9"],
+        }
+    )
 
 
 # -----------------------------------------------------------------------
 # ClinicalOutlierClipper
 # -----------------------------------------------------------------------
+
 
 class TestClinicalOutlierClipper:
 
@@ -82,8 +90,8 @@ class TestClinicalOutlierClipper:
         clipper = ClinicalOutlierClipper(action="flag")
         result = clipper.fit_transform(vitals_df)
         assert "heart_rate_outlier" in result.columns
-        assert result.loc[1, "heart_rate_outlier"] == 1   # 300 is outlier
-        assert result.loc[0, "heart_rate_outlier"] == 0   # 75 is not
+        assert result.loc[1, "heart_rate_outlier"] == 1  # 300 is outlier
+        assert result.loc[0, "heart_rate_outlier"] == 0  # 75 is not
 
     def test_invalid_action_raises(self):
         with pytest.raises(ValueError, match="action must be"):
@@ -99,10 +107,12 @@ class TestClinicalOutlierClipper:
         assert len(report) > 0
 
     def test_no_outliers_returns_empty_report(self):
-        df = pd.DataFrame({
-            "heart_rate": [60.0, 75.0, 80.0],
-            "spo2": [97.0, 98.0, 99.0],
-        })
+        df = pd.DataFrame(
+            {
+                "heart_rate": [60.0, 75.0, 80.0],
+                "spo2": [97.0, 98.0, 99.0],
+            }
+        )
         clipper = ClinicalOutlierClipper(action="clip")
         clipper.fit_transform(df)
         report = clipper.report()
@@ -118,10 +128,12 @@ class TestClinicalOutlierClipper:
 
     def test_extra_bounds_merge_with_defaults(self):
         extra = {"custom_score": BoundSpec("custom_score", 0, 10)}
-        df = pd.DataFrame({
-            "heart_rate": [75.0, 350.0],
-            "custom_score": [5.0, 15.0],
-        })
+        df = pd.DataFrame(
+            {
+                "heart_rate": [75.0, 350.0],
+                "custom_score": [5.0, 15.0],
+            }
+        )
         clipper = ClinicalOutlierClipper(action="clip", extra_bounds=extra)
         result = clipper.fit_transform(df)
         assert result["custom_score"].max() <= 10
@@ -135,10 +147,12 @@ class TestClinicalOutlierClipper:
             clipper.fit_transform(df)
 
     def test_non_numeric_columns_skipped(self):
-        df = pd.DataFrame({
-            "heart_rate": [75.0, 350.0],
-            "label": ["normal", "abnormal"],
-        })
+        df = pd.DataFrame(
+            {
+                "heart_rate": [75.0, 350.0],
+                "label": ["normal", "abnormal"],
+            }
+        )
         clipper = ClinicalOutlierClipper(action="clip")
         result = clipper.fit_transform(df)
         assert list(result["label"]) == ["normal", "abnormal"]
@@ -155,6 +169,7 @@ class TestClinicalOutlierClipper:
 # -----------------------------------------------------------------------
 # UnitNormalizer
 # -----------------------------------------------------------------------
+
 
 class TestUnitNormalizer:
 
@@ -220,8 +235,9 @@ class TestUnitNormalizer:
 
     def test_convenience_functions_roundtrip(self):
         s = pd.Series([0.0, 37.0, 100.0])
-        assert (celsius_to_fahrenheit(fahrenheit_to_celsius(celsius_to_fahrenheit(s)))
-                ).equals(celsius_to_fahrenheit(s))
+        assert (celsius_to_fahrenheit(fahrenheit_to_celsius(celsius_to_fahrenheit(s)))).equals(
+            celsius_to_fahrenheit(s)
+        )
 
     def test_glucose_conversion_roundtrip(self):
         mg_dl = pd.Series([126.0, 180.0, 54.0])
@@ -238,6 +254,7 @@ class TestUnitNormalizer:
 # -----------------------------------------------------------------------
 # ICDMapper
 # -----------------------------------------------------------------------
+
 
 class TestICDMapper:
 
@@ -270,9 +287,7 @@ class TestICDMapper:
 
     def test_harmonize_converts_icd9_rows_only(self, icd_df):
         mapper = ICDMapper()
-        result = mapper.harmonize(
-            icd_df, code_col="icd_code", version_col="icd_version"
-        )
+        result = mapper.harmonize(icd_df, code_col="icd_code", version_col="icd_version")
         # ICD-9 row 0: "41401" → "I2510"
         assert result.loc[0, "icd_code"] == "I2510"
         # ICD-10 row 3: "I10" should be unchanged

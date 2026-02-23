@@ -42,20 +42,24 @@ BASE_TIME = datetime(2023, 6, 1, 8, 0)
 rows = []
 for pid in range(1, N_PATIENTS + 1):
     for h in range(N_HOURS):
-        rows.append({
-            "subject_id": pid,
-            "hadm_id":    1000 + pid,
-            "stay_id":    2000 + pid,
-            "charttime":  BASE_TIME + timedelta(hours=h),
-            "heart_rate": float(np.clip(rng.normal(72, 8),   40, 200)),
-            "spo2":       float(np.clip(rng.normal(97, 1.5), 80, 100)),
-            "resp_rate":  float(np.clip(rng.normal(16, 3),    5,  60)),
-            "map":        float(np.clip(rng.normal(85, 12),  30, 180)),
-        })
+        rows.append(
+            {
+                "subject_id": pid,
+                "hadm_id": 1000 + pid,
+                "stay_id": 2000 + pid,
+                "charttime": BASE_TIME + timedelta(hours=h),
+                "heart_rate": float(np.clip(rng.normal(72, 8), 40, 200)),
+                "spo2": float(np.clip(rng.normal(97, 1.5), 80, 100)),
+                "resp_rate": float(np.clip(rng.normal(16, 3), 5, 60)),
+                "map": float(np.clip(rng.normal(85, 12), 30, 180)),
+            }
+        )
 
 chartevents = pd.DataFrame(rows)
-print(f"\n[ingest] Synthetic chartevents: {len(chartevents):,} rows, "
-      f"{chartevents['subject_id'].nunique()} patients")
+print(
+    f"\n[ingest] Synthetic chartevents: {len(chartevents):,} rows, "
+    f"{chartevents['subject_id'].nunique()} patients"
+)
 
 # ── MimicTableLoader (demo with tmp directory) ───────────────────────────────
 # In production, point this at your MIMIC-IV root:
@@ -66,77 +70,100 @@ print("\n[ingest] MimicTableLoader — pre-built schemas, no manual ColumnSpec r
 
 with tempfile.TemporaryDirectory() as tmp_root:
     import pathlib
+
     root = pathlib.Path(tmp_root)
     (root / "icu").mkdir()
     (root / "hosp").mkdir()
 
     # Write minimal CSVs that satisfy MimicTableLoader schemas
-    chartevents.rename(columns={
-        "heart_rate": "valuenum", "spo2": "valueuom"
-    }).assign(itemid=220045, valueuom="bpm")[
-        ["subject_id", "hadm_id", "stay_id", "itemid", "charttime", "valuenum", "valueuom"]
-    ].to_csv(root / "icu" / "chartevents.csv", index=False)
+    chartevents.rename(columns={"heart_rate": "valuenum", "spo2": "valueuom"}).assign(
+        itemid=220045, valueuom="bpm"
+    )[["subject_id", "hadm_id", "stay_id", "itemid", "charttime", "valuenum", "valueuom"]].to_csv(
+        root / "icu" / "chartevents.csv", index=False
+    )
 
-    pd.DataFrame({
-        "subject_id":     range(1, N_PATIENTS + 1),
-        "hadm_id":        range(1001, 1001 + N_PATIENTS),
-        "admittime":      [BASE_TIME] * N_PATIENTS,
-        "dischtime":      [BASE_TIME + timedelta(days=5)] * N_PATIENTS,
-        "deathtime":      [None] * N_PATIENTS,
-        "admission_type": ["EMERGENCY"] * N_PATIENTS,
-        "admission_location":  ["EMERGENCY ROOM"] * N_PATIENTS,
-        "discharge_location":  ["HOME"] * N_PATIENTS,
-        "insurance":           ["Medicare"] * N_PATIENTS,
-        "hospital_expire_flag": [0] * N_PATIENTS,
-    }).to_csv(root / "hosp" / "admissions.csv", index=False)
+    pd.DataFrame(
+        {
+            "subject_id": range(1, N_PATIENTS + 1),
+            "hadm_id": range(1001, 1001 + N_PATIENTS),
+            "admittime": [BASE_TIME] * N_PATIENTS,
+            "dischtime": [BASE_TIME + timedelta(days=5)] * N_PATIENTS,
+            "deathtime": [None] * N_PATIENTS,
+            "admission_type": ["EMERGENCY"] * N_PATIENTS,
+            "admission_location": ["EMERGENCY ROOM"] * N_PATIENTS,
+            "discharge_location": ["HOME"] * N_PATIENTS,
+            "insurance": ["Medicare"] * N_PATIENTS,
+            "hospital_expire_flag": [0] * N_PATIENTS,
+        }
+    ).to_csv(root / "hosp" / "admissions.csv", index=False)
 
     dx_rows = []
     for pid in range(1, N_PATIENTS + 1):
-        dx_rows.append({"subject_id": pid, "hadm_id": 1000 + pid,
-                        "seq_num": 1, "icd_code": "I509", "icd_version": 10})
-        dx_rows.append({"subject_id": pid, "hadm_id": 1000 + pid,
-                        "seq_num": 2, "icd_code": "E119", "icd_version": 10})
+        dx_rows.append(
+            {
+                "subject_id": pid,
+                "hadm_id": 1000 + pid,
+                "seq_num": 1,
+                "icd_code": "I509",
+                "icd_version": 10,
+            }
+        )
+        dx_rows.append(
+            {
+                "subject_id": pid,
+                "hadm_id": 1000 + pid,
+                "seq_num": 2,
+                "icd_code": "E119",
+                "icd_version": 10,
+            }
+        )
     pd.DataFrame(dx_rows).to_csv(root / "hosp" / "diagnoses_icd.csv", index=False)
 
-    pd.DataFrame({
-        "subject_id":   range(1, N_PATIENTS + 1),
-        "hadm_id":      range(1001, 1001 + N_PATIENTS),
-        "stay_id":      range(2001, 2001 + N_PATIENTS),
-        "first_careunit": ["MICU"] * N_PATIENTS,
-        "last_careunit":  ["MICU"] * N_PATIENTS,
-        "intime":   [BASE_TIME] * N_PATIENTS,
-        "outtime":  [BASE_TIME + timedelta(days=4)] * N_PATIENTS,
-        "los":      [float(rng.integers(1, 8))] * N_PATIENTS,
-    }).to_csv(root / "icu" / "icustays.csv", index=False)
+    pd.DataFrame(
+        {
+            "subject_id": range(1, N_PATIENTS + 1),
+            "hadm_id": range(1001, 1001 + N_PATIENTS),
+            "stay_id": range(2001, 2001 + N_PATIENTS),
+            "first_careunit": ["MICU"] * N_PATIENTS,
+            "last_careunit": ["MICU"] * N_PATIENTS,
+            "intime": [BASE_TIME] * N_PATIENTS,
+            "outtime": [BASE_TIME + timedelta(days=4)] * N_PATIENTS,
+            "los": [float(rng.integers(1, 8))] * N_PATIENTS,
+        }
+    ).to_csv(root / "icu" / "icustays.csv", index=False)
 
-    pd.DataFrame({
-        "subject_id": range(1, N_PATIENTS + 1),
-        "hadm_id":    range(1001, 1001 + N_PATIENTS),
-        "itemid":     [50912] * N_PATIENTS,
-        "charttime":  [BASE_TIME] * N_PATIENTS,
-        "valuenum":   rng.uniform(0.6, 1.4, N_PATIENTS).round(2),
-        "valueuom":   ["mg/dL"] * N_PATIENTS,
-        "ref_range_lower": [0.5] * N_PATIENTS,
-        "ref_range_upper": [1.5] * N_PATIENTS,
-    }).to_csv(root / "hosp" / "labevents.csv", index=False)
+    pd.DataFrame(
+        {
+            "subject_id": range(1, N_PATIENTS + 1),
+            "hadm_id": range(1001, 1001 + N_PATIENTS),
+            "itemid": [50912] * N_PATIENTS,
+            "charttime": [BASE_TIME] * N_PATIENTS,
+            "valuenum": rng.uniform(0.6, 1.4, N_PATIENTS).round(2),
+            "valueuom": ["mg/dL"] * N_PATIENTS,
+            "ref_range_lower": [0.5] * N_PATIENTS,
+            "ref_range_upper": [1.5] * N_PATIENTS,
+        }
+    ).to_csv(root / "hosp" / "labevents.csv", index=False)
 
     tbl = MimicTableLoader(root)
 
     adm = tbl.admissions()
-    print(f"[ingest] admissions:     {len(adm):,} rows — "
-          f"columns: {list(adm.columns)}")
+    print(f"[ingest] admissions:     {len(adm):,} rows — " f"columns: {list(adm.columns)}")
 
     dx = tbl.diagnoses_icd(primary_only=True)
-    print(f"[ingest] diagnoses_icd:  {len(dx):,} rows (primary only) — "
-          f"ICD versions present: {sorted(dx['icd_version'].unique())}")
+    print(
+        f"[ingest] diagnoses_icd:  {len(dx):,} rows (primary only) — "
+        f"ICD versions present: {sorted(dx['icd_version'].unique())}"
+    )
 
     stays = tbl.icustays(with_los_band=True)
-    print(f"[ingest] icustays:       {len(stays):,} rows — "
-          f"los_band counts:\n{stays['los_band'].value_counts().to_string()}")
+    print(
+        f"[ingest] icustays:       {len(stays):,} rows — "
+        f"los_band counts:\n{stays['los_band'].value_counts().to_string()}"
+    )
 
     labs = tbl.labevents(with_ref_range=False)
-    print(f"[ingest] labevents:      {len(labs):,} rows "
-          f"(ref_range columns dropped by default)")
+    print(f"[ingest] labevents:      {len(labs):,} rows " f"(ref_range columns dropped by default)")
 
 # ── FlatFileLoader + schema validation ──────────────────────────────────────
 schema = ClinicalSchema(
@@ -144,10 +171,10 @@ schema = ClinicalSchema(
     columns=[
         ColumnSpec("subject_id", nullable=False),
         ColumnSpec("heart_rate", min_value=0, max_value=300),
-        ColumnSpec("spo2",       min_value=50, max_value=100),
-        ColumnSpec("resp_rate",  min_value=0,  max_value=80),
-        ColumnSpec("map",        min_value=0,  max_value=300),
-    ]
+        ColumnSpec("spo2", min_value=50, max_value=100),
+        ColumnSpec("resp_rate", min_value=0, max_value=80),
+        ColumnSpec("map", min_value=0, max_value=300),
+    ],
 )
 
 with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
@@ -174,17 +201,21 @@ glucose_rows = []
 for pid in range(1, N_PATIENTS + 1):
     # half patients have glucose in mg/dL, half in mmol/L
     if pid <= N_PATIENTS // 2:
-        glucose_rows.append({
-            "subject_id": pid,
-            "glucose":      float(rng.uniform(80, 140)),
-            "glucose_unit": "mg/dL",
-        })
+        glucose_rows.append(
+            {
+                "subject_id": pid,
+                "glucose": float(rng.uniform(80, 140)),
+                "glucose_unit": "mg/dL",
+            }
+        )
     else:
-        glucose_rows.append({
-            "subject_id": pid,
-            "glucose":      float(rng.uniform(4.4, 7.8)),   # mmol/L range
-            "glucose_unit": "mmol/L",
-        })
+        glucose_rows.append(
+            {
+                "subject_id": pid,
+                "glucose": float(rng.uniform(4.4, 7.8)),  # mmol/L range
+                "glucose_unit": "mmol/L",
+            }
+        )
 glucose_df = pd.DataFrame(glucose_rows)
 
 print("[preprocess] Before normalization:")
@@ -200,11 +231,13 @@ print(f"[preprocess] Conversions applied:\n{norm_report.to_string(index=False)}"
 
 # ── ICDMapper ────────────────────────────────────────────────────────────────
 print("\n[preprocess] Harmonizing mixed ICD-9 / ICD-10 codes to ICD-10...")
-icd_df = pd.DataFrame({
-    "subject_id":   [1, 2, 3, 4, 5],
-    "icd_code":     ["I509", "4280",  "E119", "25000", "N179"],
-    "icd_version":  [10,     9,       10,     9,       10],
-})
+icd_df = pd.DataFrame(
+    {
+        "subject_id": [1, 2, 3, 4, 5],
+        "icd_code": ["I509", "4280", "E119", "25000", "N179"],
+        "icd_version": [10, 9, 10, 9, 10],
+    }
+)
 print("[preprocess] Before harmonization:")
 print(icd_df.to_string(index=False))
 
@@ -233,16 +266,18 @@ print(f"[temporal] {len(windows):,} windows — shape: {windows.shape}")
 print(windows.head(3).to_string(index=False))
 
 # ── Imputer (train/test split — no leakage) ─────────────────────────────────
-split   = int(len(windows) * 0.7)
+split = int(len(windows) * 0.7)
 train_w = windows.iloc[:split].copy()
-test_w  = windows.iloc[split:].copy()
+test_w = windows.iloc[split:].copy()
 
 rng2 = np.random.default_rng(7)
 missing_idx = rng2.choice(test_w.index, size=max(1, len(test_w) // 10), replace=False)
 test_w.loc[missing_idx, "heart_rate"] = np.nan
 
-print(f"\n[temporal] Imputing {test_w['heart_rate'].isna().sum()} missing heart_rate values "
-      f"(MEAN, fitted on train set)...")
+print(
+    f"\n[temporal] Imputing {test_w['heart_rate'].isna().sum()} missing heart_rate values "
+    f"(MEAN, fitted on train set)..."
+)
 imputer = Imputer(ImputationStrategy.MEAN)
 imputer.fit(train_w)
 test_imputed = imputer.transform(test_w)
@@ -260,10 +295,12 @@ new_cols = [c for c in enriched.columns if c not in windows.columns]
 print(f"[temporal] Added {len(new_cols)} features: {new_cols}")
 
 # ── Cohort alignment ─────────────────────────────────────────────────────────
-admissions_df = pd.DataFrame({
-    "subject_id": range(1, N_PATIENTS + 1),
-    "intime":     [BASE_TIME + timedelta(hours=4)] * N_PATIENTS,
-})
+admissions_df = pd.DataFrame(
+    {
+        "subject_id": range(1, N_PATIENTS + 1),
+        "intime": [BASE_TIME + timedelta(hours=4)] * N_PATIENTS,
+    }
+)
 
 print("\n[temporal] Aligning cohort to ICU admission (0–36h post-admission window)...")
 aligned = CohortAligner(
@@ -274,9 +311,11 @@ aligned = CohortAligner(
     max_hours_after=36,
 ).align(events_df=chartevents, anchor_df=admissions_df)
 
-print(f"[temporal] {len(aligned):,} events retained | "
-      f"hours_from_anchor: [{aligned['hours_from_anchor'].min():.1f}, "
-      f"{aligned['hours_from_anchor'].max():.1f}]")
+print(
+    f"[temporal] {len(aligned):,} events retained | "
+    f"hours_from_anchor: [{aligned['hours_from_anchor'].min():.1f}, "
+    f"{aligned['hours_from_anchor'].max():.1f}]"
+)
 
 # ── TemporalSplitter ─────────────────────────────────────────────────────────
 print("\n[split] Temporal split — no future data leakage...")
@@ -296,7 +335,7 @@ p_result = PatientSplitter(
 ).split(chartevents)
 print(p_result.summary())
 train_pids = set(p_result.train["subject_id"].unique())
-test_pids  = set(p_result.test["subject_id"].unique())
+test_pids = set(p_result.test["subject_id"].unique())
 assert not train_pids & test_pids, "Patient leakage detected!"
 print(f"[split] Train patients: {sorted(train_pids)}")
 print(f"[split] Test  patients: {sorted(test_pids)}")
@@ -307,8 +346,8 @@ print("\n[split] Stratified patient split — preserves outcome rate...")
 # Add a synthetic binary outcome: patients 1–3 are "high risk"
 outcome_map = {pid: int(pid <= 3) for pid in range(1, N_PATIENTS + 1)}
 chartevents_with_outcome = chartevents.copy()
-chartevents_with_outcome["hospital_expire_flag"] = (
-    chartevents_with_outcome["subject_id"].map(outcome_map)
+chartevents_with_outcome["hospital_expire_flag"] = chartevents_with_outcome["subject_id"].map(
+    outcome_map
 )
 
 s_result = StratifiedPatientSplitter(
@@ -330,12 +369,9 @@ print(f"  ICD codes mapped:     {len(harmonized)}")
 print(f"  Windows:              {len(windows):,}")
 print(f"  Enriched shape:       {enriched.shape}")
 print(f"  Aligned events:       {len(aligned):,}  (0–36h post-ICU-admission)")
-print(f"  Temporal split  →  train: {len(t_result.train):,}  "
-      f"test: {len(t_result.test):,}")
-print(f"  Patient split   →  train: {len(p_result.train):,}  "
-      f"test: {len(p_result.test):,}")
-print(f"  Stratified split→  train: {len(s_result.train):,}  "
-      f"test: {len(s_result.test):,}")
+print(f"  Temporal split  →  train: {len(t_result.train):,}  " f"test: {len(t_result.test):,}")
+print(f"  Patient split   →  train: {len(p_result.train):,}  " f"test: {len(p_result.test):,}")
+print(f"  Stratified split→  train: {len(s_result.train):,}  " f"test: {len(s_result.test):,}")
 print()
 print("Next steps:")
 print("  • MimicTableLoader('/data/mimic-iv-2.2') — swap in real MIMIC-IV data")

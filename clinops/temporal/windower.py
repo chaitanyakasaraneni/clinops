@@ -166,8 +166,9 @@ class TemporalWindower:
             feature_cols = [c for c in df.columns if c not in [id_col, time_col]]
 
         if feature_cols is None:
-            feature_cols = [c for c in df.select_dtypes(include=[np.number]).columns
-                            if c not in [id_col]]
+            feature_cols = [
+                c for c in df.select_dtypes(include=[np.number]).columns if c not in [id_col]
+            ]
 
         logger.info(
             f"Windowing {len(df):,} rows for {df[id_col].nunique()} subjects "
@@ -275,14 +276,11 @@ class TemporalWindower:
         item_col: str,
         value_col: str,
     ) -> pd.DataFrame:
-        pivoted = (
-            df.pivot_table(
-                index=[id_col, time_col],
-                columns=item_col,
-                values=value_col,
-                aggfunc="mean",
-            )
-            .reset_index()
-        )
+        pivoted = df.pivot_table(
+            index=[id_col, time_col],
+            columns=item_col,
+            values=value_col,
+            aggfunc="mean",
+        ).reset_index()
         pivoted.columns.name = None
         return pivoted

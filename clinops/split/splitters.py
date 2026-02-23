@@ -149,8 +149,7 @@ class TemporalSplitter:
         test = df[test_mask].reset_index(drop=True)
 
         logger.info(
-            f"TemporalSplitter: cutoff={cutoff} → "
-            f"train={len(train):,}, test={len(test):,}"
+            f"TemporalSplitter: cutoff={cutoff} → " f"train={len(train):,}, test={len(test):,}"
         )
 
         return SplitResult(
@@ -332,9 +331,7 @@ class StratifiedPatientSplitter:
 
         # Derive per-patient outcome label
         patient_labels = (
-            df.groupby(self.id_col)[self.outcome_col]
-            .apply(self._outcome_fn)
-            .reset_index()
+            df.groupby(self.id_col)[self.outcome_col].apply(self._outcome_fn).reset_index()
         )
         patient_labels.columns = [self.id_col, "_label"]
 

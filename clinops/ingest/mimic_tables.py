@@ -50,14 +50,14 @@ from clinops.ingest.schema import ClinicalSchema, ColumnSpec
 #: use ClinicalOutlierClipper for that).  Stored here so researchers can inspect
 #: them without running the full preprocessor.
 VITAL_BOUNDS: dict[str, tuple[float, float]] = {
-    "heart_rate":    (0,   300),
-    "spo2":          (50,  100),
-    "sbp":           (0,   300),
-    "dbp":           (0,   200),
-    "map":           (0,   200),
-    "resp_rate":     (0,   60),
-    "temperature":   (25,  45),
-    "glucose":       (0,   2000),
+    "heart_rate": (0, 300),
+    "spo2": (50, 100),
+    "sbp": (0, 300),
+    "dbp": (0, 200),
+    "map": (0, 200),
+    "resp_rate": (0, 60),
+    "temperature": (25, 45),
+    "glucose": (0, 2000),
 }
 
 _SCHEMAS: dict[str, ClinicalSchema] = {
@@ -65,23 +65,23 @@ _SCHEMAS: dict[str, ClinicalSchema] = {
         name="chartevents",
         columns=[
             ColumnSpec("subject_id", nullable=False),
-            ColumnSpec("hadm_id",    nullable=True),
-            ColumnSpec("stay_id",    nullable=False),
-            ColumnSpec("itemid",     nullable=False),
-            ColumnSpec("charttime",  nullable=False),
-            ColumnSpec("valuenum",   nullable=True),
-            ColumnSpec("valueuom",   nullable=True),
+            ColumnSpec("hadm_id", nullable=True),
+            ColumnSpec("stay_id", nullable=False),
+            ColumnSpec("itemid", nullable=False),
+            ColumnSpec("charttime", nullable=False),
+            ColumnSpec("valuenum", nullable=True),
+            ColumnSpec("valueuom", nullable=True),
         ],
     ),
     "labevents": ClinicalSchema(
         name="labevents",
         columns=[
             ColumnSpec("subject_id", nullable=False),
-            ColumnSpec("hadm_id",    nullable=True),
-            ColumnSpec("itemid",     nullable=False),
-            ColumnSpec("charttime",  nullable=False),
-            ColumnSpec("valuenum",   nullable=True),
-            ColumnSpec("valueuom",   nullable=True),
+            ColumnSpec("hadm_id", nullable=True),
+            ColumnSpec("itemid", nullable=False),
+            ColumnSpec("charttime", nullable=False),
+            ColumnSpec("valuenum", nullable=True),
+            ColumnSpec("valueuom", nullable=True),
             ColumnSpec("ref_range_lower", nullable=True),
             ColumnSpec("ref_range_upper", nullable=True),
         ],
@@ -89,15 +89,15 @@ _SCHEMAS: dict[str, ClinicalSchema] = {
     "admissions": ClinicalSchema(
         name="admissions",
         columns=[
-            ColumnSpec("subject_id",      nullable=False),
-            ColumnSpec("hadm_id",         nullable=False),
-            ColumnSpec("admittime",        nullable=False),
-            ColumnSpec("dischtime",        nullable=True),
-            ColumnSpec("deathtime",        nullable=True),
-            ColumnSpec("admission_type",   nullable=False),
+            ColumnSpec("subject_id", nullable=False),
+            ColumnSpec("hadm_id", nullable=False),
+            ColumnSpec("admittime", nullable=False),
+            ColumnSpec("dischtime", nullable=True),
+            ColumnSpec("deathtime", nullable=True),
+            ColumnSpec("admission_type", nullable=False),
             ColumnSpec("admission_location", nullable=True),
             ColumnSpec("discharge_location", nullable=True),
-            ColumnSpec("insurance",        nullable=True),
+            ColumnSpec("insurance", nullable=True),
             ColumnSpec("hospital_expire_flag", nullable=True),
         ],
     ),
@@ -105,23 +105,23 @@ _SCHEMAS: dict[str, ClinicalSchema] = {
         name="diagnoses_icd",
         columns=[
             ColumnSpec("subject_id", nullable=False),
-            ColumnSpec("hadm_id",    nullable=False),
-            ColumnSpec("seq_num",    nullable=False),
-            ColumnSpec("icd_code",   nullable=False),
+            ColumnSpec("hadm_id", nullable=False),
+            ColumnSpec("seq_num", nullable=False),
+            ColumnSpec("icd_code", nullable=False),
             ColumnSpec("icd_version", nullable=False),
         ],
     ),
     "icustays": ClinicalSchema(
         name="icustays",
         columns=[
-            ColumnSpec("subject_id",      nullable=False),
-            ColumnSpec("hadm_id",         nullable=False),
-            ColumnSpec("stay_id",         nullable=False),
-            ColumnSpec("first_careunit",  nullable=True),
-            ColumnSpec("last_careunit",   nullable=True),
-            ColumnSpec("intime",          nullable=False),
-            ColumnSpec("outtime",         nullable=True),
-            ColumnSpec("los",             nullable=True),
+            ColumnSpec("subject_id", nullable=False),
+            ColumnSpec("hadm_id", nullable=False),
+            ColumnSpec("stay_id", nullable=False),
+            ColumnSpec("first_careunit", nullable=True),
+            ColumnSpec("last_careunit", nullable=True),
+            ColumnSpec("intime", nullable=False),
+            ColumnSpec("outtime", nullable=True),
+            ColumnSpec("los", nullable=True),
         ],
     ),
 }
@@ -135,6 +135,7 @@ _EXTRA_TABLE_PATHS: dict[str, tuple[str, str]] = {
 # ---------------------------------------------------------------------------
 # MimicTableLoader
 # ---------------------------------------------------------------------------
+
 
 class MimicTableLoader:
     """
@@ -317,9 +318,7 @@ class MimicTableLoader:
         if primary_only:
             df = df[df["seq_num"] == 1]
         _SCHEMAS["diagnoses_icd"].validate(df)
-        logger.info(
-            f"diagnoses_icd: {len(df):,} rows (primary_only={primary_only})"
-        )
+        logger.info(f"diagnoses_icd: {len(df):,} rows (primary_only={primary_only})")
         return df.reset_index(drop=True)
 
     def icustays(
@@ -375,19 +374,23 @@ class MimicTableLoader:
                 path = self._resolve_extra_path(table_name)
                 sample = pd.read_csv(path, nrows=10_000, low_memory=False)
                 null_rate = sample.isnull().mean().mean() * 100
-                records.append({
-                    "table":          table_name,
-                    "rows_sampled":   len(sample),
-                    "columns":        len(sample.columns),
-                    "null_rate_pct":  round(null_rate, 2),
-                })
+                records.append(
+                    {
+                        "table": table_name,
+                        "rows_sampled": len(sample),
+                        "columns": len(sample.columns),
+                        "null_rate_pct": round(null_rate, 2),
+                    }
+                )
             except FileNotFoundError:
-                records.append({
-                    "table":         table_name,
-                    "rows_sampled":  0,
-                    "columns":       0,
-                    "null_rate_pct": None,
-                })
+                records.append(
+                    {
+                        "table": table_name,
+                        "rows_sampled": 0,
+                        "columns": 0,
+                        "null_rate_pct": None,
+                    }
+                )
         result = pd.DataFrame(records)
         print(result.to_string(index=False))
         return result

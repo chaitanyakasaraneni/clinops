@@ -40,7 +40,7 @@ class ConversionSpec:
 
     from_unit: str
     to_unit: str
-    factor: float | None          # result = value * factor  (None if fn is used)
+    factor: float | None  # result = value * factor  (None if fn is used)
     fn: Callable[[pd.Series], pd.Series] | None = None  # for non-linear conversions
 
     def convert(self, series: pd.Series) -> pd.Series:
@@ -60,51 +60,34 @@ UNIT_CONVERSIONS: dict[str, ConversionSpec] = {
     # Glucose
     "glucose__mg_dl__mmol_l": ConversionSpec("mg/dL", "mmol/L", 1 / 18.018),
     "glucose__mmol_l__mg_dl": ConversionSpec("mmol/L", "mg/dL", 18.018),
-
     # Creatinine
     "creatinine__mg_dl__umol_l": ConversionSpec("mg/dL", "μmol/L", 88.42),
     "creatinine__umol_l__mg_dl": ConversionSpec("μmol/L", "mg/dL", 1 / 88.42),
-
     # BUN (blood urea nitrogen) — reported as urea in mmol/L in Europe
     "bun__mg_dl__mmol_l": ConversionSpec("mg/dL", "mmol/L", 1 / 2.801),
     "bun__mmol_l__mg_dl": ConversionSpec("mmol/L", "mg/dL", 2.801),
-
     # Bilirubin
     "bilirubin__mg_dl__umol_l": ConversionSpec("mg/dL", "μmol/L", 17.104),
     "bilirubin__umol_l__mg_dl": ConversionSpec("μmol/L", "mg/dL", 1 / 17.104),
-
     # Haemoglobin
     "hgb__g_dl__mmol_l": ConversionSpec("g/dL", "mmol/L", 0.6206),
     "hgb__mmol_l__g_dl": ConversionSpec("mmol/L", "g/dL", 1 / 0.6206),
-
     # Calcium (total)
     "calcium__mg_dl__mmol_l": ConversionSpec("mg/dL", "mmol/L", 0.2495),
     "calcium__mmol_l__mg_dl": ConversionSpec("mmol/L", "mg/dL", 4.008),
-
     # Phosphate
     "phosphate__mg_dl__mmol_l": ConversionSpec("mg/dL", "mmol/L", 0.3229),
     "phosphate__mmol_l__mg_dl": ConversionSpec("mmol/L", "mg/dL", 3.097),
-
     # Temperature (non-linear)
-    "temperature__f__c": ConversionSpec(
-        "°F", "°C", None, fn=lambda s: (s - 32) * 5 / 9
-    ),
-    "temperature__c__f": ConversionSpec(
-        "°C", "°F", None, fn=lambda s: s * 9 / 5 + 32
-    ),
-    "temperature__k__c": ConversionSpec(
-        "K", "°C", None, fn=lambda s: s - 273.15
-    ),
-    "temperature__c__k": ConversionSpec(
-        "°C", "K", None, fn=lambda s: s + 273.15
-    ),
-
+    "temperature__f__c": ConversionSpec("°F", "°C", None, fn=lambda s: (s - 32) * 5 / 9),
+    "temperature__c__f": ConversionSpec("°C", "°F", None, fn=lambda s: s * 9 / 5 + 32),
+    "temperature__k__c": ConversionSpec("K", "°C", None, fn=lambda s: s - 273.15),
+    "temperature__c__k": ConversionSpec("°C", "K", None, fn=lambda s: s + 273.15),
     # Weight
     "weight__lb__kg": ConversionSpec("lb", "kg", 0.453592),
     "weight__kg__lb": ConversionSpec("kg", "lb", 2.20462),
     "weight__g__kg": ConversionSpec("g", "kg", 0.001),
     "weight__kg__g": ConversionSpec("kg", "g", 1000.0),
-
     # Height
     "height__in__cm": ConversionSpec("in", "cm", 2.54),
     "height__cm__in": ConversionSpec("cm", "in", 1 / 2.54),
@@ -197,13 +180,15 @@ class UnitNormalizer:
                 continue
             n_non_null = df[col].notna().sum()
             df[col] = spec.convert(df[col])
-            self._converted.append({
-                "column": col,
-                "from_unit": spec.from_unit,
-                "to_unit": spec.to_unit,
-                "n_converted": int(n_non_null),
-                "method": "explicit",
-            })
+            self._converted.append(
+                {
+                    "column": col,
+                    "from_unit": spec.from_unit,
+                    "to_unit": spec.to_unit,
+                    "n_converted": int(n_non_null),
+                    "method": "explicit",
+                }
+            )
             logger.info(f"UnitNormalizer: converted {col} from {spec.from_unit} → {spec.to_unit}")
 
         # Unit-column-aware conversions
@@ -241,13 +226,15 @@ class UnitNormalizer:
                 df.loc[mask, value_col] = spec.convert(df.loc[mask, value_col])
                 df.loc[mask, unit_col] = target_unit
 
-                self._converted.append({
-                    "column": value_col,
-                    "from_unit": from_unit,
-                    "to_unit": target_unit,
-                    "n_converted": n,
-                    "method": "unit_column",
-                })
+                self._converted.append(
+                    {
+                        "column": value_col,
+                        "from_unit": from_unit,
+                        "to_unit": target_unit,
+                        "n_converted": n,
+                        "method": "unit_column",
+                    }
+                )
                 logger.info(
                     f"UnitNormalizer: converted {n:,} rows of '{value_col}' "
                     f"from {from_unit} → {target_unit}"
@@ -258,14 +245,13 @@ class UnitNormalizer:
     def report(self) -> pd.DataFrame:
         """Return a summary of all conversions applied."""
         if not self._converted:
-            return pd.DataFrame(
-                columns=["column", "from_unit", "to_unit", "n_converted", "method"]
-            )
+            return pd.DataFrame(columns=["column", "from_unit", "to_unit", "n_converted", "method"])
         return pd.DataFrame(self._converted)
 
     @staticmethod
     def _make_key(variable: str, from_unit: str, to_unit: str) -> str:
         """Normalise a unit string to a registry key segment."""
+
         def _norm(u: str) -> str:
             return (
                 u.lower()
@@ -275,6 +261,7 @@ class UnitNormalizer:
                 .replace(" ", "_")
                 .strip("_")
             )
+
         return f"{variable}__{_norm(from_unit)}__{_norm(to_unit)}"
 
     @staticmethod
@@ -286,6 +273,7 @@ class UnitNormalizer:
 # -----------------------------------------------------------------------
 # Convenience functions
 # -----------------------------------------------------------------------
+
 
 def celsius_to_fahrenheit(series: pd.Series) -> pd.Series:
     """Convert temperature from °C to °F."""

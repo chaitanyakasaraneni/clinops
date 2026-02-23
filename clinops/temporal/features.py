@@ -47,7 +47,8 @@ class LagFeatureBuilder:
         """Add lag and rolling features. Returns enriched DataFrame."""
         df = df.copy().sort_values([self.id_col, "window_start"])
         numeric_cols = self.feature_cols or [
-            c for c in df.select_dtypes(include=[np.number]).columns
+            c
+            for c in df.select_dtypes(include=[np.number]).columns
             if c not in [self.id_col, "label"]
         ]
 
@@ -148,8 +149,8 @@ class CohortAligner:
         df["hours_from_anchor"] = (df[self.time_col] - anchors).dt.total_seconds() / 3600
 
         df = df[
-            (df["hours_from_anchor"] >= -self.max_hours_before) &
-            (df["hours_from_anchor"] <= self.max_hours_after)
+            (df["hours_from_anchor"] >= -self.max_hours_before)
+            & (df["hours_from_anchor"] <= self.max_hours_after)
         ]
         df = df.drop(columns=[], errors="ignore").reset_index(drop=True)
 

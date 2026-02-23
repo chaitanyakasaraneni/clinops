@@ -1,4 +1,5 @@
 """Tests for clinops.temporal module."""
+
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -20,13 +21,15 @@ def make_vitals_df(n_patients=3, n_hours=48, freq_minutes=60) -> pd.DataFrame:
     base_time = datetime(2023, 1, 1)
     for pid in range(1, n_patients + 1):
         for h in range(0, n_hours * 60, freq_minutes):
-            rows.append({
-                "subject_id": pid,
-                "charttime": base_time + timedelta(minutes=h),
-                "heart_rate": 70 + np.random.normal(0, 5),
-                "spo2": 97 + np.random.normal(0, 1),
-                "resp_rate": 16 + np.random.normal(0, 2),
-            })
+            rows.append(
+                {
+                    "subject_id": pid,
+                    "charttime": base_time + timedelta(minutes=h),
+                    "heart_rate": 70 + np.random.normal(0, 5),
+                    "spo2": 97 + np.random.normal(0, 1),
+                    "resp_rate": 16 + np.random.normal(0, 2),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -34,13 +37,13 @@ def make_vitals_df(n_patients=3, n_hours=48, freq_minutes=60) -> pd.DataFrame:
 # TemporalWindower tests
 # ---------------------------------------------------------------------------
 
+
 class TestTemporalWindower:
     def test_basic_windowing(self):
         df = make_vitals_df(n_patients=2, n_hours=24, freq_minutes=60)
         windower = TemporalWindower(window_hours=6, step_hours=6)
         result = windower.fit_transform(
-            df, id_col="subject_id", time_col="charttime",
-            feature_cols=["heart_rate", "spo2"]
+            df, id_col="subject_id", time_col="charttime", feature_cols=["heart_rate", "spo2"]
         )
         assert len(result) > 0
         assert "window_start" in result.columns
@@ -50,9 +53,9 @@ class TestTemporalWindower:
     def test_overlapping_windows(self):
         df = make_vitals_df(n_patients=1, n_hours=24)
         w_tumbling = TemporalWindower(window_hours=6, step_hours=6)
-        w_sliding   = TemporalWindower(window_hours=6, step_hours=3)
+        w_sliding = TemporalWindower(window_hours=6, step_hours=3)
         r_tumbling = w_tumbling.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
-        r_sliding  = w_sliding.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
+        r_sliding = w_sliding.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert len(r_sliding) >= len(r_tumbling)
 
     def test_min_observations_filter(self):
@@ -65,8 +68,7 @@ class TestTemporalWindower:
     def test_custom_aggregation(self):
         df = make_vitals_df(n_patients=1, n_hours=12)
         windower = TemporalWindower(
-            window_hours=6, step_hours=6,
-            aggregations={"heart_rate": "max", "spo2": "min"}
+            window_hours=6, step_hours=6, aggregations={"heart_rate": "max", "spo2": "min"}
         )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate", "spo2"])
         assert len(result) > 0
@@ -87,6 +89,7 @@ class TestTemporalWindower:
 # ---------------------------------------------------------------------------
 # Imputer tests
 # ---------------------------------------------------------------------------
+
 
 class TestImputer:
     def test_forward_fill(self):
@@ -137,6 +140,7 @@ class TestImputer:
 # LagFeatureBuilder tests
 # ---------------------------------------------------------------------------
 
+
 class TestLagFeatureBuilder:
     def test_lag_columns_created(self):
         df = make_vitals_df(n_patients=1, n_hours=12)
@@ -163,23 +167,26 @@ class TestLagFeatureBuilder:
 # CohortAligner tests
 # ---------------------------------------------------------------------------
 
+
 class TestCohortAligner:
     def test_basic_alignment(self):
         base = datetime(2023, 1, 1, 12, 0)
-        events = pd.DataFrame({
-            "subject_id": [1, 1, 1, 1],
-            "charttime": [
-                base - timedelta(hours=2),
-                base - timedelta(hours=1),
-                base + timedelta(hours=6),
-                base + timedelta(hours=50),  # outside window
-            ],
-            "heart_rate": [70, 72, 75, 80],
-        })
+        events = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1, 1],
+                "charttime": [
+                    base - timedelta(hours=2),
+                    base - timedelta(hours=1),
+                    base + timedelta(hours=6),
+                    base + timedelta(hours=50),  # outside window
+                ],
+                "heart_rate": [70, 72, 75, 80],
+            }
+        )
         anchors = pd.DataFrame({"subject_id": [1], "icu_intime": [base]})
         aligner = CohortAligner(anchor_col="icu_intime", max_hours_before=4, max_hours_after=24)
         aligned = aligner.align(events, anchors)
-        assert len(aligned) == 3   # row at +50h excluded
+        assert len(aligned) == 3  # row at +50h excluded
         assert "hours_from_anchor" in aligned.columns
         assert aligned["hours_from_anchor"].min() >= -4
         assert aligned["hours_from_anchor"].max() <= 24
