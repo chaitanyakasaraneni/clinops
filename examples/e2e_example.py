@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 
 from clinops.ingest import ClinicalSchema, ColumnSpec, FlatFileLoader
+from clinops.preprocess import ClinicalOutlierClipper, ICDMapper, UnitNormalizer
+from clinops.split import PatientSplitter, StratifiedPatientSplitter, TemporalSplitter
 from clinops.temporal import (
     CohortAligner,
     ImputationStrategy,
@@ -145,6 +147,85 @@ print(f"[temporal] {len(aligned):,} events retained | "
       f"hours_from_anchor: [{aligned['hours_from_anchor'].min():.1f}, "
       f"{aligned['hours_from_anchor'].max():.1f}]")
 
+# ── Outlier clipping ─────────────────────────────────────────────────────────
+
+print("\n[preprocess] Clipping physiologically impossible values...")
+clipper = ClinicalOutlierClipper(action="clip")
+chartevents_clean = clipper.fit_transform(chartevents)
+report = clipper.report()
+if len(report):
+    print(report.to_string(index=False))
+else:
+    print(
+        "[preprocess] No outliers detected in synthetic data \n"
+        "(expected — data was clipped at generation)"
+    )
+
+# ── Unit normalization ────────────────────────────────────────────────────────
+
+print("\n[preprocess] Demonstrating unit normalization (mixed glucose units)...")
+glucose_df = pd.DataFrame({
+    "subject_id":   [1, 2, 3, 4],
+    "glucose":      [126.0, 5.5, 180.0, 7.2],
+    "glucose_unit": ["mg/dL", "mmol/L", "mg/dL", "mmol/L"],
+})
+print(f"  Before: {glucose_df['glucose'].tolist()} {glucose_df['glucose_unit'].tolist()}")
+normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
+glucose_norm = normalizer.transform(glucose_df)
+print(f"  After:  {[round(v, 1) for v in glucose_norm['glucose'].tolist()]} "
+      f"{glucose_norm['glucose_unit'].tolist()}")
+print(normalizer.report().to_string(index=False))
+
+# ── ICD mapping ───────────────────────────────────────────────────────────────
+
+print("\n[preprocess] Harmonizing mixed ICD-9/ICD-10 diagnosis codes...")
+dx_df = pd.DataFrame({
+    "subject_id":  [1, 2, 3, 4, 5],
+    "icd_code":    ["41401", "4280", "42731", "I10", "49121"],
+    "icd_version": ["9", "9", "9", "10", "9"],
+})
+mapper = ICDMapper()
+dx_harmonized = mapper.harmonize(dx_df, code_col="icd_code", version_col="icd_version")
+dx_harmonized["chapter"] = mapper.chapter_series(dx_harmonized["icd_code"])
+print(dx_harmonized[["subject_id", "icd_code", "chapter"]].to_string(index=False))
+print(f"  Mapper loaded {mapper.n_mappings} ICD-9→10 mappings")
+
+# ── Splitting ─────────────────────────────────────────────────────────────────
+
+print("\n[split] TemporalSplitter — cutoff at 24h mark...")
+temporal_splitter = TemporalSplitter(
+    cutoff=BASE_TIME + timedelta(hours=24), time_col="charttime"
+)
+t_result = temporal_splitter.split(chartevents)
+print(t_result.summary())
+
+print("\n[split] PatientSplitter — patient-level 80/20 split...")
+patient_splitter = PatientSplitter(id_col="subject_id", test_size=0.2, random_state=42)
+p_result = patient_splitter.split(chartevents)
+print(p_result.summary())
+train_ids = set(p_result.train["subject_id"].unique())
+test_ids  = set(p_result.test["subject_id"].unique())
+print(f"  Train patients: {sorted(train_ids)}")
+print(f"  Test patients:  {sorted(test_ids)}")
+assert train_ids.isdisjoint(test_ids), "Patient leakage detected!"
+print("  ✓ No patient leakage")
+
+print("\n[split] StratifiedPatientSplitter — preserving outcome rate...")
+# Add a synthetic binary outcome: patients 1-3 are "high risk"
+chartevents_with_outcome = chartevents.copy()
+chartevents_with_outcome["mortality"] = (
+    chartevents_with_outcome["subject_id"] <= 3
+).astype(int)
+strat_splitter = StratifiedPatientSplitter(
+    id_col="subject_id",
+    outcome_col="mortality",
+    test_size=0.3,
+    random_state=42,
+)
+s_result = strat_splitter.split(chartevents_with_outcome)
+print(s_result.summary())
+
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
 print("✅  v0.1 pipeline complete")
@@ -158,3 +239,8 @@ print("Next steps:")
 print("  • clinops.ingest.MimicLoader  — swap in real MIMIC-IV data")
 print("  • clinops.ingest.FHIRLoader   — load FHIR R4 observations")
 print("  • clinops v0.2                — drift detection + GCS/S3 orchestration")
+print(f"  Outlier report:  {len(report)} columns checked")
+print(f"  ICD codes mapped: {len(dx_harmonized)} dx records harmonized")
+print(f"  Temporal split:  train={t_result.train_size:,} / test={t_result.test_size:,} rows")
+print(f"  Patient split:   train={p_result.metadata['n_train_patients']} / "
+      f"test={p_result.metadata['n_test_patients']} patients")
