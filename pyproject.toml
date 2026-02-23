@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clinops"
-version = "0.1.3"
+version = "0.1.4"
 description = "Clinical ML Pipeline Toolkit — bridging raw clinical data and production-ready ML pipelines"
 readme = "README.md"
 license = { file = "LICENSE" }
