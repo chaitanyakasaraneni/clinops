@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 BLOGPOST.md
+paper/paper.pdf
 
 # C extensions
 *.so
