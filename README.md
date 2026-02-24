@@ -372,6 +372,18 @@ pip install -e ".[dev]"       # development
 | FHIR R4 | JSON Bundle, NDJSON |
 | Flat files | CSV, CSV.GZ, Parquet |
 
+
+---
+
+## Generative AI usage disclosure
+
+This library was developed with assistance from Claude (Anthropic) as an AI pair-programming tool. Specifically, Claude was used for:
+
+- **Generating test cases** — unit test drafts for edge cases (e.g., empty DataFrames, single-patient cohorts, missing unit columns), all reviewed and validated against real expected outputs
+- **Drafting docstrings** — inline documentation for public methods, reviewed and corrected for accuracy by the author
+- **Iterating on error messages** — improving the clarity of `ValueError` and `logger.warning` messages
+
+All generated code was reviewed, tested, and validated by the author prior to release.
 ---
 
 ## Contributing
