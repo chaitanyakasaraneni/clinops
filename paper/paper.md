@@ -12,8 +12,9 @@ authors:
   - name: Chaitanya Kasaraneni
     orcid: 0000-0001-5792-1095
     affiliation: 1
+    url: https://ckasaraneni.com
 affiliations:
-  - name: Egen, IL, USA
+  - name: Independent Researcher, Chicago, Illinois, USA
     index: 1
 date: 23 February 2026
 bibliography: paper.bib
