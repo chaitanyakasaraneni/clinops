@@ -172,6 +172,13 @@ under the Apache 2.0 license. The library requires Python 3.12+ and has no
 dependency on proprietary data sources; the included end-to-end example
 (`examples/e2e_example.py`) runs entirely on synthetic data.
 
+# AI Usage Disclosure
+
+The initial draft of this paper was developed with assistance from Claude
+(Anthropic), a large language model. The author reviewed, edited, and verified
+all content for accuracy and correctness. The software itself — including all
+source code, tests, and documentation — was written by the author independently.
+
 # Acknowledgements
 
 The author thanks the MIMIC project team at the MIT Laboratory for Computational
