@@ -11,6 +11,10 @@ and time-series feature engineering for healthcare AI research.
 
 ---
 
+![clinops pipeline diagram](imgs/clinops_v0.1.png)
+
+---
+
 Every healthcare AI project starts with the same two weeks of plumbing: loading
 MIMIC-IV tables without hitting memory limits, clipping physiologically impossible
 values before they corrupt your model, normalizing glucose from mmol/L to mg/dL
@@ -385,7 +389,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pytest tests/ -v` and
   title   = {clinops: Clinical ML Pipeline Toolkit},
   year    = {2026},
   url     = {https://github.com/chaitanyakasaraneni/clinops},
-  version = {0.1.0}
+  version = {0.1.6}
 }
 ```
 
