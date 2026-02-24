@@ -11,7 +11,7 @@ and time-series feature engineering for healthcare AI research.
 
 ---
 
-![clinops pipeline diagram](imgs/clinops_v0.1.png)
+![clinops pipeline diagram](https://raw.githubusercontent.com/chaitanyakasaraneni/clinops/main/imgs/clinops_v0.1.png)
 
 ---
 
