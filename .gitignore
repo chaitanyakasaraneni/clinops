@@ -5,6 +5,7 @@ __pycache__/
 
 BLOGPOST.md
 paper/paper.pdf
+issue-pyOpenSci.md
 
 # C extensions
 *.so

@@ -130,14 +130,16 @@ class Imputer:
             df[numeric_cols] = df[numeric_cols].fillna(0.0)
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
+            original_nulls = df[numeric_cols].isna()
             df[numeric_cols] = df[numeric_cols].ffill()
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                df = self._mask_large_gaps(df, numeric_cols, forward=True)
+                df = self._mask_large_gaps(df, numeric_cols, forward=True, original_nulls=original_nulls)
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
+            original_nulls = df[numeric_cols].isna()
             df[numeric_cols] = df[numeric_cols].bfill()
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                df = self._mask_large_gaps(df, numeric_cols, forward=False)
+                df = self._mask_large_gaps(df, numeric_cols, forward=False, original_nulls=original_nulls)
 
         elif self.strategy == ImputationStrategy.LINEAR:
             df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")
@@ -172,7 +174,8 @@ class Imputer:
     # ------------------------------------------------------------------
 
     def _mask_large_gaps(
-        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool
+        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool,
+        original_nulls: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """
         Re-introduce NaN where the gap between actual observations exceeds
@@ -185,11 +188,12 @@ class Imputer:
         gap_hours = time.diff().dt.total_seconds() / 3600
 
         for col in numeric_cols:
-            original_null = df[col].copy()
+            # Use pre-fill nulls when provided; fall back to current column state
+            was_null_before_fill = (
+                original_nulls[col] if original_nulls is not None else df[col].isna()
+            )
             max_gap = self.max_gap_hours
             large_gap = gap_hours > max_gap if forward else gap_hours.shift(-1).fillna(0) > max_gap
-            # Mask filled values that crossed a large gap
-            was_null_before_fill = original_null.isna()
             df.loc[was_null_before_fill & large_gap, col] = np.nan
 
         return df
