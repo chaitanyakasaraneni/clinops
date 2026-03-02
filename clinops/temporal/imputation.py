@@ -131,29 +131,34 @@ class Imputer:
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
             if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
-                # Preserve caller's row order; sort only to compute gaps correctly.
-                original_order = df.index.copy()
+                # Tag each row with its original position so we can invert the
+                # sort deterministically after gap masking. Using a sentinel
+                # column avoids index-type assumptions (RangeIndex, custom, etc.)
+                df["_original_pos"] = np.arange(len(df))
                 df = df.sort_values(self.time_col).reset_index(drop=True)
                 original_nulls = df[numeric_cols].isna()
                 df[numeric_cols] = df[numeric_cols].ffill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=True, original_nulls=original_nulls
                 )
-                df = df.reindex(original_order.argsort()).reset_index(drop=True)
+                df = df.sort_values("_original_pos").drop(
+                    columns=["_original_pos"]).reset_index(drop=True)
             else:
                 df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
             if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
-                # Preserve caller's row order; sort only to compute gaps correctly.
-                original_order = df.index.copy()
+                # Tag each row with its original position so we can invert the
+                # sort deterministically after gap masking.
+                df["_original_pos"] = np.arange(len(df))
                 df = df.sort_values(self.time_col).reset_index(drop=True)
                 original_nulls = df[numeric_cols].isna()
                 df[numeric_cols] = df[numeric_cols].bfill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=False, original_nulls=original_nulls
                 )
-                df = df.reindex(original_order.argsort()).reset_index(drop=True)
+                df = df.sort_values("_original_pos").drop(
+                    columns=["_original_pos"]).reset_index(drop=True)
             else:
                 df[numeric_cols] = df[numeric_cols].bfill()
 

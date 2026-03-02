@@ -20,7 +20,8 @@ Supported tables
 - ``chartevents``    — ICU charted observations (vitals, GCS, vents)
 - ``labevents``      — Hospital lab results
 - ``admissions``     — Hospital admission / discharge records
-- ``diagnoses_icd``  — ICD-9-CM diagnosis codes (seq_num + icd_code)
+- ``patients``       — Patient-level demographics
+- ``diagnoses_icd``  — ICD-9-CM diagnosis codes (seq_num + icd9_code)
 - ``icustays``       — ICU stay metadata including LOS
 - ``prescriptions``  — Medication orders
 - ``inputevents_mv`` — MetaVision fluid inputs (CareVue: ``inputevents_cv``)
@@ -49,7 +50,6 @@ Sci Data 3, 160035 (2016). https://doi.org/10.1038/sdata.2016.35
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -76,38 +76,30 @@ def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 #: All MIMIC-III tables live in a flat directory (no module subdirectories).
 _TABLE_STEMS: dict[str, str] = {
-    "chartevents":    "CHARTEVENTS",
-    "labevents":      "LABEVENTS",
-    "admissions":     "ADMISSIONS",
-    "diagnoses_icd":  "DIAGNOSES_ICD",
-    "icustays":       "ICUSTAYS",
-    "prescriptions":  "PRESCRIPTIONS",
+    "chartevents": "CHARTEVENTS",
+    "labevents": "LABEVENTS",
+    "admissions": "ADMISSIONS",
+    "diagnoses_icd": "DIAGNOSES_ICD",
+    "icustays": "ICUSTAYS",
+    "prescriptions": "PRESCRIPTIONS",
     "inputevents_mv": "INPUTEVENTS_MV",
     "inputevents_cv": "INPUTEVENTS_CV",
-    "d_items":        "D_ITEMS",
-    "d_labitems":     "D_LABITEMS",
-    "patients":       "PATIENTS",
+    "d_items": "D_ITEMS",
+    "d_labitems": "D_LABITEMS",
+    "patients": "PATIENTS",
 }
 
 #: Required columns per table (post-normalisation, lowercase).
 _REQUIRED_COLS: dict[str, list[str]] = {
-    "chartevents":    ["subject_id", "hadm_id", "icustay_id", "itemid",
-                       "charttime", "valuenum"],
-    "labevents":      ["subject_id", "hadm_id", "itemid", "charttime",
-                       "valuenum", "valueuom"],
-    "admissions":     ["subject_id", "hadm_id", "admittime", "dischtime",
-                       "admission_type"],
-    "diagnoses_icd":  ["subject_id", "hadm_id", "seq_num", "icd9_code"],
-    "icustays":       ["subject_id", "hadm_id", "icustay_id", "intime",
-                       "outtime", "los"],
-    "prescriptions":  ["subject_id", "hadm_id", "startdate", "drug"],
-    "inputevents_mv": ["subject_id", "hadm_id", "icustay_id", "itemid",
-                       "starttime", "amount", "amountuom"],
-    "inputevents_cv": ["subject_id", "hadm_id", "icustay_id", "itemid",
-                       "charttime", "amount", "amountuom"],
-    "d_items":        ["itemid", "label"],
-    "d_labitems":     ["itemid", "label"],
-    "patients":       ["subject_id", "gender", "dob"],
+    "chartevents": ["subject_id", "hadm_id", "icustay_id", "itemid", "charttime", "valuenum"],
+    "labevents": ["subject_id", "hadm_id", "itemid", "charttime", "valuenum", "valueuom"],
+    "admissions": ["subject_id", "hadm_id", "admittime", "dischtime", "admission_type"],
+    "diagnoses_icd": ["subject_id", "hadm_id", "seq_num", "icd9_code"],
+    "icustays": ["subject_id", "hadm_id", "icustay_id", "intime", "outtime", "los"],
+    "prescriptions": ["subject_id", "hadm_id", "startdate", "drug"],
+    "inputevents_mv": [
+        "subject_id", "hadm_id", "icustay_id", "itemid", "starttime", "amount", "amountuom"
+    ],
 }
 
 #: Datetime columns per table (post-normalisation, lowercase).
@@ -139,7 +131,7 @@ class MimicIIIConfig(BaseModel):
     @classmethod
     def path_must_exist(cls, v: Path) -> Path:
         if not v.exists():
-            raise FileNotFoundError(f"MIMIC-III path does not exist: {v}")
+            raise ValueError(f"MIMIC-III path does not exist: {v}")
         return v
 
 
@@ -171,11 +163,8 @@ class MimicIIILoader:
         If ``True`` (default), raise :exc:`SchemaValidationError` when
         required columns are missing. If ``False``, log a warning and continue.
     chunk_size:
-        If set, large tables (``chartevents``, ``labevents``) are read from
-        disk in chunks of this row size and then concatenated into a single
-        :class:`pandas.DataFrame`. This can reduce peak I/O and intermediate
-        memory usage during loading, but the final result is still held fully
-        in memory.
+        If set, large tables (``chartevents``, ``labevents``) return a chunked
+        reader instead of loading fully into memory.
 
     Examples
     --------
@@ -206,12 +195,12 @@ class MimicIIILoader:
 
     def chartevents(
         self,
-        subject_ids:  Sequence[int] | None = None,
-        hadm_ids:     Sequence[int] | None = None,
-        icustay_ids:  Sequence[int] | None = None,
-        item_ids:     Sequence[int] | None = None,
-        start_time:   str | None = None,
-        end_time:     str | None = None,
+        subject_ids: Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
+        icustay_ids: Sequence[int] | None = None,
+        item_ids: Sequence[int] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
     ) -> pd.DataFrame:
         """
         Load ICU charted observations.
@@ -251,11 +240,11 @@ class MimicIIILoader:
 
     def labevents(
         self,
-        subject_ids:    Sequence[int] | None = None,
-        hadm_ids:       Sequence[int] | None = None,
-        item_ids:       Sequence[int] | None = None,
-        start_time:     str | None = None,
-        end_time:       str | None = None,
+        subject_ids: Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
+        item_ids: Sequence[int] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
         with_ref_range: bool = False,
     ) -> pd.DataFrame:
         """
@@ -292,7 +281,7 @@ class MimicIIILoader:
     def admissions(
         self,
         subject_ids: Sequence[int] | None = None,
-        hadm_ids:    Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
         """
         Load hospital admission and discharge records.
@@ -308,9 +297,9 @@ class MimicIIILoader:
 
     def diagnoses_icd(
         self,
-        subject_ids:  Sequence[int] | None = None,
-        hadm_ids:     Sequence[int] | None = None,
-        icd9_codes:   Sequence[str] | None = None,
+        subject_ids: Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
+        icd9_codes: Sequence[str] | None = None,
         primary_only: bool = False,
     ) -> pd.DataFrame:
         """
@@ -369,7 +358,7 @@ class MimicIIILoader:
     def icustays(
         self,
         subject_ids: Sequence[int] | None = None,
-        hadm_ids:    Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
         icustay_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
         """
@@ -391,8 +380,8 @@ class MimicIIILoader:
     def prescriptions(
         self,
         subject_ids: Sequence[int] | None = None,
-        hadm_ids:    Sequence[int] | None = None,
-        drugs:       Sequence[str] | None = None,
+        hadm_ids: Sequence[int] | None = None,
+        drugs: Sequence[str] | None = None,
     ) -> pd.DataFrame:
         """
         Load medication prescriptions.
@@ -411,16 +400,16 @@ class MimicIIILoader:
         df = self._load("prescriptions")
         df = self._filter(df, subject_ids, hadm_ids)
         if drugs is not None:
-            pattern = "|".join(re.escape(d) for d in drugs)
+            pattern = "|".join(drugs)
             df = df[df["drug"].str.contains(pattern, case=False, na=False)]
         return df
 
     def inputevents(
         self,
         subject_ids: Sequence[int] | None = None,
-        hadm_ids:    Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
         icustay_ids: Sequence[int] | None = None,
-        source:      str = "mv",
+        source: str = "mv",
     ) -> pd.DataFrame:
         """
         Load ICU fluid input events.
@@ -531,6 +520,10 @@ class MimicIIILoader:
         path = self._resolve_path(table_name)
         logger.debug(f"Loading MIMIC-III {table_name} from {path}")
 
+        read_kwargs: dict = {}
+        if self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
+            read_kwargs["chunksize"] = self._cfg.chunk_size
+
         if path.suffix == ".parquet":
             df = pd.read_parquet(path)
         elif self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
@@ -578,13 +571,13 @@ class MimicIIILoader:
     def _filter(
         self,
         df: pd.DataFrame,
-        subject_ids:  Sequence[int] | None = None,
-        hadm_ids:     Sequence[int] | None = None,
-        icustay_ids:  Sequence[int] | None = None,
-        item_ids:     Sequence[int] | None = None,
-        start_time:   str | None = None,
-        end_time:     str | None = None,
-        time_col:     str | None = None,
+        subject_ids: Sequence[int] | None = None,
+        hadm_ids: Sequence[int] | None = None,
+        icustay_ids: Sequence[int] | None = None,
+        item_ids: Sequence[int] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        time_col: str | None = None,
     ) -> pd.DataFrame:
         if subject_ids is not None and "subject_id" in df.columns:
             df = df[df["subject_id"].isin(subject_ids)]

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from clinops.ingest.mimic_iii import MimicIIILoader
 
@@ -383,7 +384,7 @@ class TestDictionaries:
 
 class TestErrors:
     def test_missing_path_raises(self, tmp_path):
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(ValidationError, match="does not exist"):
             MimicIIILoader(tmp_path / "nonexistent")
 
     def test_missing_table_raises(self, tmp_path):

@@ -487,60 +487,70 @@ class TestImputer:
 
     def test_forward_fill_gap_masking_correct_on_unsorted_input(self):
         # Rows delivered in reverse chronological order.
-        # Before the fix, original_nulls was captured before sort, causing
-        # index misalignment: the NaN mask for row at 06:00 was applied to
-        # the wrong row after sort, producing silent incorrect results.
-        # After the fix, sort happens before capture so masking is correct.
+        # Gap masking must apply correctly (based on sorted time gaps) AND
+        # the result must come back in the original input order.
         times = pd.to_datetime(
             [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)])
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, 70.0]})  # reversed order
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
-        # After sort: 00:00=70, 06:00=NaN (6h gap > 4h → stays NaN), 12:00=80
-        # Result is sorted so check by time value, not position
-        result = result.sort_values("time").reset_index(drop=True)
-        assert result["hr"].iloc[0] == pytest.approx(70.0)   # 00:00 — original
+        # Input order preserved: row 0=12:00, row 1=06:00, row 2=00:00
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 12:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 06:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
+        # Gap masking: 06:00 NaN has 6h gap from 00:00 > 4h → stays NaN
+        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 12:00 — original
         assert pd.isna(result["hr"].iloc[1])                  # 06:00 — gap too large, re-nulled
-        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 12:00 — original
+        assert result["hr"].iloc[2] == pytest.approx(70.0)   # 00:00 — original
 
     def test_forward_fill_gap_within_threshold_correct_on_unsorted_input(self):
         # Same unsorted setup but gap is within threshold — fill should persist.
+        # Input order must be preserved in the result.
         times = pd.to_datetime(
             [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)])
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, 70.0]})  # reversed
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
-        result = result.sort_values("time").reset_index(drop=True)
-        assert result["hr"].iloc[0] == pytest.approx(70.0)   # 00:00 — original
+        # Input order preserved: row 0=04:00, row 1=02:00, row 2=00:00
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 04:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 02:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
+        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 04:00 — original
         assert result["hr"].iloc[1] == pytest.approx(70.0)   # 02:00 — filled (2h < 4h)
-        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 04:00 — original
+        assert result["hr"].iloc[2] == pytest.approx(70.0)   # 00:00 — original
 
     def test_backward_fill_gap_masking_correct_on_unsorted_input(self):
         # Rows delivered in reverse chronological order.
-        # Before the fix, original_nulls was computed before bfill and before
-        # sort — same index misalignment bug as forward fill.
+        # Gap masking must apply correctly AND result must come back in input order.
         times = pd.to_datetime(
             [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)])
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})  # reversed
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
-        # After sort: 00:00=NaN (12h gap > 4h → stays NaN),
-        #             06:00=NaN (6h gap > 4h → stays NaN), 12:00=80
-        result = result.sort_values("time").reset_index(drop=True)
-        assert pd.isna(result["hr"].iloc[0])                  # 00:00 — gap too large
+        # Input order preserved: row 0=12:00, row 1=06:00, row 2=00:00
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 12:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 06:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
+        # Both NaNs: 06:00 is 6h from 12:00 > 4h → stays NaN;
+        #            00:00 is 12h from 12:00 > 4h → stays NaN
+        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 12:00 — original
         assert pd.isna(result["hr"].iloc[1])                  # 06:00 — gap too large
-        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 12:00 — original
+        assert pd.isna(result["hr"].iloc[2])                  # 00:00 — gap too large
 
     def test_backward_fill_gap_within_threshold_correct_on_unsorted_input(self):
+        # Gap within threshold — fill should persist. Input order must be preserved.
         times = pd.to_datetime(
             [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)])
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})  # reversed
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
-        result = result.sort_values("time").reset_index(drop=True)
-        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 00:00 — filled (4h <= 4h)
+        # Input order preserved: row 0=04:00, row 1=02:00, row 2=00:00
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 04:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 02:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
+        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 04:00 — original
         assert result["hr"].iloc[1] == pytest.approx(80.0)   # 02:00 — filled (2h < 4h)
-        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 04:00 — original
+        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 00:00 — filled (4h <= 4h)
 
     def test_forward_fill_gap_masking_preserves_input_row_order(self):
         # transform() must return rows in the same order they were passed in,
