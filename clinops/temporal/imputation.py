@@ -131,7 +131,10 @@ class Imputer:
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                original_nulls = df[numeric_cols].isna() # capture pre-fill nulls for gap masking
+                # Sort before capturing nulls so original_nulls index aligns with
+                # the sorted order that _mask_large_gaps will operate on.
+                df = df.sort_values(self.time_col).reset_index(drop=True)
+                original_nulls = df[numeric_cols].isna()
                 df[numeric_cols] = df[numeric_cols].ffill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=True, original_nulls=original_nulls
@@ -140,12 +143,17 @@ class Imputer:
                 df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
-            original_nulls = df[numeric_cols].isna()
-            df[numeric_cols] = df[numeric_cols].bfill()
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
+                # Sort before capturing nulls so original_nulls index aligns with
+                # the sorted order that _mask_large_gaps will operate on.
+                df = df.sort_values(self.time_col).reset_index(drop=True)
+                original_nulls = df[numeric_cols].isna()
+                df[numeric_cols] = df[numeric_cols].bfill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=False, original_nulls=original_nulls
                 )
+            else:
+                df[numeric_cols] = df[numeric_cols].bfill()
 
         elif self.strategy == ImputationStrategy.LINEAR:
             df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")
@@ -186,10 +194,11 @@ class Imputer:
         """
         Re-introduce NaN where the gap between actual observations exceeds
         max_gap_hours, preventing stale carry-forward over long intervals.
+
+        Callers are expected to sort by time_col and reset_index before
+        calling this method, and to capture original_nulls after that sort
+        so that row indices are aligned.
         """
-        df = df.sort_values(self.time_col).reset_index(drop=True)
-        if original_nulls is not None:
-            original_nulls = original_nulls.reindex(df.index)
         time = pd.to_datetime(df[self.time_col])
         gap_hours = time.diff().dt.total_seconds() / 3600
 
