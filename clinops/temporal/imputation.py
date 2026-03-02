@@ -130,28 +130,30 @@ class Imputer:
             df[numeric_cols] = df[numeric_cols].fillna(0.0)
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
-            if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                # Sort before capturing nulls so original_nulls index aligns with
-                # the sorted order that _mask_large_gaps will operate on.
+            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
+                # Preserve caller's row order; sort only to compute gaps correctly.
+                original_order = df.index.copy()
                 df = df.sort_values(self.time_col).reset_index(drop=True)
                 original_nulls = df[numeric_cols].isna()
                 df[numeric_cols] = df[numeric_cols].ffill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=True, original_nulls=original_nulls
                 )
+                df = df.reindex(original_order.argsort()).reset_index(drop=True)
             else:
                 df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
-            if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                # Sort before capturing nulls so original_nulls index aligns with
-                # the sorted order that _mask_large_gaps will operate on.
+            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
+                # Preserve caller's row order; sort only to compute gaps correctly.
+                original_order = df.index.copy()
                 df = df.sort_values(self.time_col).reset_index(drop=True)
                 original_nulls = df[numeric_cols].isna()
                 df[numeric_cols] = df[numeric_cols].bfill()
                 df = self._mask_large_gaps(
                     df, numeric_cols, forward=False, original_nulls=original_nulls
                 )
+                df = df.reindex(original_order.argsort()).reset_index(drop=True)
             else:
                 df[numeric_cols] = df[numeric_cols].bfill()
 
@@ -198,7 +200,20 @@ class Imputer:
         Callers are expected to sort by time_col and reset_index before
         calling this method, and to capture original_nulls after that sort
         so that row indices are aligned.
+
+        Raises
+        ------
+        ValueError
+            If time_col is not set, not present in df, or max_gap_hours is None.
         """
+        if self.max_gap_hours is None:
+            raise ValueError("_mask_large_gaps called with max_gap_hours=None")
+        if not self.time_col:
+            raise ValueError("_mask_large_gaps called without time_col set")
+        if self.time_col not in df.columns:
+            raise ValueError(
+                f"_mask_large_gaps: time_col '{self.time_col}' not found in DataFrame"
+            )
         time = pd.to_datetime(df[self.time_col])
         gap_hours = time.diff().dt.total_seconds() / 3600
 

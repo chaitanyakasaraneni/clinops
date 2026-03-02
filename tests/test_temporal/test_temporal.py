@@ -542,6 +542,51 @@ class TestImputer:
         assert result["hr"].iloc[1] == pytest.approx(80.0)   # 02:00 — filled (2h < 4h)
         assert result["hr"].iloc[2] == pytest.approx(80.0)   # 04:00 — original
 
+    def test_forward_fill_gap_masking_preserves_input_row_order(self):
+        # transform() must return rows in the same order they were passed in,
+        # even when gap masking internally sorts by time. Before the fix,
+        # sort_values() was not reversed, so callers relying on positional
+        # iloc would get silently wrong results.
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)])
+        # Input order: 12:00, 00:00, 06:00 (deliberately shuffled)
+        df = pd.DataFrame({"time": times, "hr": [80.0, 70.0, np.nan]})
+        imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
+        result = imputer.fit_transform(df)
+        # Row 0 (12:00), row 1 (00:00), row 2 (06:00) — input order must be preserved
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 12:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 00:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 06:00")
+        # And gap masking must still work: 06:00 NaN is 6h from 00:00 > 4h → stays NaN
+        assert pd.isna(result["hr"].iloc[2])
+
+    def test_backward_fill_gap_masking_preserves_input_row_order(self):
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)])
+        # Input order: 12:00, 00:00, 06:00 (shuffled)
+        df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})
+        imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
+        result = imputer.fit_transform(df)
+        # Row order must match input
+        assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 12:00")
+        assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 00:00")
+        assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 06:00")
+        # 00:00 NaN: 12h from 12:00 > 4h → stays NaN; 06:00 NaN: 6h > 4h → stays NaN
+        assert pd.isna(result["hr"].iloc[1])
+        assert pd.isna(result["hr"].iloc[2])
+
+    def test_max_gap_hours_zero_enables_masking_not_disables_it(self):
+        # max_gap_hours=0 means "never fill across any gap" — every filled value
+        # should be re-nulled. With truthiness check (if self.max_gap_hours),
+        # 0 was treated as falsey and gap masking was silently skipped entirely.
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1), datetime(2023, 1, 1, 2)])
+        df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
+        imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=0, time_col="time")
+        result = imputer.fit_transform(df)
+        # Any gap > 0h means re-null: the filled NaN at 01:00 must be restored
+        assert pd.isna(result["hr"].iloc[1])
+
 
 # ---------------------------------------------------------------------------
 # LagFeatureBuilder tests
