@@ -428,6 +428,8 @@ class MimicIIILoader:
         pd.DataFrame
             For MetaVision: ``subject_id``, ``hadm_id``, ``icustay_id``,
             ``itemid``, ``starttime``, ``amount``, ``amountuom``.
+            When ``source="both"``, also includes ``event_time`` (unified
+            timestamp) and ``source`` (``"mv"`` or ``"cv"``).
         """
         if source not in {"mv", "cv", "both"}:
             raise ValueError(
@@ -452,7 +454,28 @@ class MimicIIILoader:
                 )
             )
 
-        result = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+        # When combining MetaVision and CareVue input events, normalise to a
+        # common timestamp column and record the source system so callers have
+        # a consistent schema regardless of the underlying table.
+        if len(dfs) > 1:
+            normalised: list[pd.DataFrame] = []
+            for df in dfs:
+                df_norm = df.copy()
+                if "starttime" in df_norm.columns:
+                    df_norm["event_time"] = df_norm["starttime"]
+                    df_norm["source"] = "mv"
+                elif "charttime" in df_norm.columns:
+                    df_norm["event_time"] = df_norm["charttime"]
+                    df_norm["source"] = "cv"
+                else:
+                    # Fallback: no recognised time column; keep schema
+                    # consistent but leave event_time/source missing.
+                    df_norm["event_time"] = pd.NaT
+                    df_norm["source"] = pd.NA
+                normalised.append(df_norm)
+            result = pd.concat(normalised, ignore_index=True)
+        else:
+            result = dfs[0]
         return result
 
     def patients(

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-from pydantic import ValidationError
 
 from clinops.ingest.mimic_iii import MimicIIILoader
 
@@ -356,6 +355,42 @@ class TestInputevents:
         with pytest.raises(ValueError, match="source must be"):
             loader.inputevents(source="invalid")
 
+    def test_both_adds_event_time_column(self, loader):
+        # source="both" must add a unified event_time column so callers
+        # can sort/window across MV and CV rows without knowing which
+        # native time column to use.
+        df = loader.inputevents(source="both")
+        assert "event_time" in df.columns
+
+    def test_both_adds_source_column(self, loader):
+        # source="both" must tag each row with its origin system so callers
+        # can filter or stratify by MetaVision vs CareVue after merging.
+        df = loader.inputevents(source="both")
+        assert "source" in df.columns
+        assert set(df["source"].unique()) == {"mv", "cv"}
+
+    def test_both_mv_event_time_equals_starttime(self, loader):
+        # For MetaVision rows, event_time must mirror starttime.
+        df = loader.inputevents(source="both")
+        mv_rows = df[df["source"] == "mv"]
+        assert (mv_rows["event_time"] == mv_rows["starttime"]).all()
+
+    def test_both_cv_event_time_equals_charttime(self, loader):
+        # For CareVue rows, event_time must mirror charttime.
+        df = loader.inputevents(source="both")
+        cv_rows = df[df["source"] == "cv"]
+        assert (cv_rows["event_time"] == cv_rows["charttime"]).all()
+
+    def test_single_source_no_event_time_column(self, loader):
+        # event_time/source normalisation only applies when source="both".
+        # Single-table loads should not add extra columns.
+        df_mv = loader.inputevents(source="mv")
+        assert "event_time" not in df_mv.columns
+        assert "source" not in df_mv.columns
+        df_cv = loader.inputevents(source="cv")
+        assert "event_time" not in df_cv.columns
+        assert "source" not in df_cv.columns
+
 
 # ---------------------------------------------------------------------------
 # Dictionaries
@@ -384,6 +419,7 @@ class TestDictionaries:
 
 class TestErrors:
     def test_missing_path_raises(self, tmp_path):
+        from pydantic import ValidationError
         with pytest.raises(ValidationError, match="does not exist"):
             MimicIIILoader(tmp_path / "nonexistent")
 
