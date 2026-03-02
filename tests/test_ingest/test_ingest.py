@@ -296,8 +296,6 @@ class TestFHIRLoader:
         df = loader.conditions()
         assert isinstance(df, pd.DataFrame)
 
-    # --- lines 132-135: directory source with .json and .ndjson files ---
-
     def test_load_from_directory_json(self, tmp_path):
         import json
 

@@ -182,8 +182,6 @@ class TestDiagnosesIcd:
         versions = set(df["icd_version"].astype(str))
         assert "9" in versions and "10" in versions
 
-    # --- line 317: hadm_ids filter ---
-
     def test_filter_by_hadm(self, loader):
         df = loader.diagnoses_icd(hadm_ids=[100])
         assert len(df) == 2
@@ -192,8 +190,6 @@ class TestDiagnosesIcd:
     def test_filter_by_hadm_no_match(self, loader):
         df = loader.diagnoses_icd(hadm_ids=[999])
         assert len(df) == 0
-
-    # --- line 407: parquet branch in _load_extra_table ---
 
     def test_loads_from_parquet(self, mimic_dir):
         import pandas as pd
@@ -205,8 +201,6 @@ class TestDiagnosesIcd:
         df = ldr.diagnoses_icd()
         assert len(df) == 4
         assert "icd_code" in df.columns
-
-    # --- line 421: FileNotFoundError in _resolve_extra_path ---
 
     def test_missing_file_raises(self, mimic_dir):
         (mimic_dir / "hosp" / "diagnoses_icd.csv").unlink()
@@ -266,8 +260,6 @@ class TestSummary:
             "diagnoses_icd",
             "icustays",
         }
-
-    # --- lines 385-386: FileNotFoundError branch in summary() ---
 
     def test_missing_tables_appear_with_zero_rows(self, tmp_path):
         # Only chartevents present; all other tables absent → hits except branch

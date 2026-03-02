@@ -133,7 +133,9 @@ class Imputer:
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
                 original_nulls = df[numeric_cols].isna() # capture pre-fill nulls for gap masking
                 df[numeric_cols] = df[numeric_cols].ffill()
-                df = self._mask_large_gaps(df, numeric_cols, forward=True, original_nulls=original_nulls)
+                df = self._mask_large_gaps(
+                    df, numeric_cols, forward=True, original_nulls=original_nulls
+                )
             else:
                 df[numeric_cols] = df[numeric_cols].ffill()
 
@@ -141,7 +143,9 @@ class Imputer:
             original_nulls = df[numeric_cols].isna()
             df[numeric_cols] = df[numeric_cols].bfill()
             if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                df = self._mask_large_gaps(df, numeric_cols, forward=False, original_nulls=original_nulls)
+                df = self._mask_large_gaps(
+                    df, numeric_cols, forward=False, original_nulls=original_nulls
+                )
 
         elif self.strategy == ImputationStrategy.LINEAR:
             df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")

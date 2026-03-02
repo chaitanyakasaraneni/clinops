@@ -172,7 +172,9 @@ class TestTemporalWindower:
             "charttime": [base + timedelta(hours=h) for h in range(3)],
             "heart_rate": [70.0, 80.0, 90.0],
         })
-        windower = TemporalWindower(window_hours=6, step_hours=6, aggregations={"heart_rate": "median"})
+        windower = TemporalWindower(
+            window_hours=6, step_hours=6, aggregations={"heart_rate": "median"}
+        )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert result["heart_rate"].iloc[0] == pytest.approx(80.0)
 
@@ -183,7 +185,9 @@ class TestTemporalWindower:
             "charttime": [base + timedelta(hours=h) for h in range(3)],
             "heart_rate": [70.0, 75.0, 80.0],
         })
-        windower = TemporalWindower(window_hours=6, step_hours=6, aggregations={"heart_rate": "last"})
+        windower = TemporalWindower(
+            window_hours=6, step_hours=6, aggregations={"heart_rate": "last"}
+        )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert result["heart_rate"].iloc[0] == pytest.approx(80.0)
 
@@ -194,7 +198,9 @@ class TestTemporalWindower:
             "charttime": [base + timedelta(hours=h) for h in range(3)],
             "heart_rate": [70.0, 75.0, 80.0],
         })
-        windower = TemporalWindower(window_hours=6, step_hours=6, aggregations={"heart_rate": "first"})
+        windower = TemporalWindower(
+            window_hours=6, step_hours=6, aggregations={"heart_rate": "first"}
+        )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert result["heart_rate"].iloc[0] == pytest.approx(70.0)
 
@@ -205,7 +211,9 @@ class TestTemporalWindower:
             "charttime": [base + timedelta(hours=h) for h in range(3)],
             "heart_rate": [70.0, 80.0, 90.0],
         })
-        windower = TemporalWindower(window_hours=6, step_hours=6, aggregations={"heart_rate": "p95"})
+        windower = TemporalWindower(
+            window_hours=6, step_hours=6, aggregations={"heart_rate": "p95"}
+        )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert result["heart_rate"].iloc[0] == pytest.approx(80.0)
 
@@ -330,7 +338,8 @@ class TestImputer:
 
     def test_forward_fill_gap_exceeding_threshold_renulled(self):
         # 6h gap > 4h threshold: ffill fills NaN then gap masking re-nulls it
-        times = pd.to_datetime([datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
         df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -338,14 +347,16 @@ class TestImputer:
 
     def test_forward_fill_gap_within_threshold_kept(self):
         # 2h gap < 4h threshold: fill should persist
-        times = pd.to_datetime([datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
         df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
         assert result["hr"].iloc[1] == pytest.approx(70.0)
 
     def test_backward_fill_gap_exceeding_threshold_renulled(self):
-        times = pd.to_datetime([datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
         df = pd.DataFrame({"time": times, "hr": [np.nan, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -353,7 +364,8 @@ class TestImputer:
         assert pd.isna(result["hr"].iloc[1])
 
     def test_backward_fill_gap_within_threshold_kept(self):
-        times = pd.to_datetime([datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
         df = pd.DataFrame({"time": times, "hr": [np.nan, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -384,7 +396,8 @@ class TestImputer:
         assert result["hr"].iloc[1] == pytest.approx(70.0)  # ffill still ran
 
     def test_originally_non_null_values_not_masked(self):
-        times = pd.to_datetime([datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+        times = pd.to_datetime(
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
         df = pd.DataFrame({"time": times, "hr": [70.0, 75.0, 80.0]})  # no NaNs
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)

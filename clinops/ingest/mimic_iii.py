@@ -49,15 +49,15 @@ Sci Data 3, 160035 (2016). https://doi.org/10.1038/sdata.2016.35
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import pandas as pd
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
 from clinops.ingest.schema import SchemaValidationError
-
 
 # ---------------------------------------------------------------------------
 # Column name normalisation
@@ -103,6 +103,11 @@ _REQUIRED_COLS: dict[str, list[str]] = {
     "prescriptions":  ["subject_id", "hadm_id", "startdate", "drug"],
     "inputevents_mv": ["subject_id", "hadm_id", "icustay_id", "itemid",
                        "starttime", "amount", "amountuom"],
+    "inputevents_cv": ["subject_id", "hadm_id", "icustay_id", "itemid",
+                       "charttime", "amount", "amountuom"],
+    "d_items":        ["itemid", "label"],
+    "d_labitems":     ["itemid", "label"],
+    "patients":       ["subject_id", "gender", "dob"],
 }
 
 #: Datetime columns per table (post-normalisation, lowercase).
@@ -166,8 +171,11 @@ class MimicIIILoader:
         If ``True`` (default), raise :exc:`SchemaValidationError` when
         required columns are missing. If ``False``, log a warning and continue.
     chunk_size:
-        If set, large tables (``chartevents``, ``labevents``) return a chunked
-        reader instead of loading fully into memory.
+        If set, large tables (``chartevents``, ``labevents``) are read from
+        disk in chunks of this row size and then concatenated into a single
+        :class:`pandas.DataFrame`. This can reduce peak I/O and intermediate
+        memory usage during loading, but the final result is still held fully
+        in memory.
 
     Examples
     --------
@@ -403,7 +411,7 @@ class MimicIIILoader:
         df = self._load("prescriptions")
         df = self._filter(df, subject_ids, hadm_ids)
         if drugs is not None:
-            pattern = "|".join(drugs)
+            pattern = "|".join(re.escape(d) for d in drugs)
             df = df[df["drug"].str.contains(pattern, case=False, na=False)]
         return df
 
@@ -522,10 +530,6 @@ class MimicIIILoader:
         """Load, normalise columns, parse datetimes, validate schema."""
         path = self._resolve_path(table_name)
         logger.debug(f"Loading MIMIC-III {table_name} from {path}")
-
-        read_kwargs: dict = {}
-        if self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
-            read_kwargs["chunksize"] = self._cfg.chunk_size
 
         if path.suffix == ".parquet":
             df = pd.read_parquet(path)
