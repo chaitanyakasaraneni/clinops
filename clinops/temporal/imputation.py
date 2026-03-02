@@ -10,6 +10,7 @@ tuned for clinical context.
 
 from __future__ import annotations
 
+import uuid
 from enum import StrEnum
 
 import numpy as np
@@ -131,34 +132,41 @@ class Imputer:
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
             if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
-                # Tag each row with its original position so we can invert the
-                # sort deterministically after gap masking. Using a sentinel
-                # column avoids index-type assumptions (RangeIndex, custom, etc.)
-                df["_original_pos"] = np.arange(len(df))
-                df = df.sort_values(self.time_col).reset_index(drop=True)
-                original_nulls = df[numeric_cols].isna()
-                df[numeric_cols] = df[numeric_cols].ffill()
-                df = self._mask_large_gaps(
-                    df, numeric_cols, forward=True, original_nulls=original_nulls
-                )
-                df = df.sort_values("_original_pos").drop(
-                    columns=["_original_pos"]).reset_index(drop=True)
+                # Use a UUID-based sentinel to avoid clobbering any user column
+                # and to guarantee uniqueness. try/finally ensures the column is
+                # always removed, even if an exception is raised mid-transform.
+                _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
+                try:
+                    df[_sentinel] = np.arange(len(df))
+                    df = df.sort_values(self.time_col).reset_index(drop=True)
+                    original_nulls = df[numeric_cols].isna()
+                    df[numeric_cols] = df[numeric_cols].ffill()
+                    df = self._mask_large_gaps(
+                        df, numeric_cols, forward=True, original_nulls=original_nulls
+                    )
+                    df = df.sort_values(_sentinel).reset_index(drop=True)
+                finally:
+                    df = df.drop(columns=[_sentinel], errors="ignore")
             else:
                 df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
             if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
-                # Tag each row with its original position so we can invert the
-                # sort deterministically after gap masking.
-                df["_original_pos"] = np.arange(len(df))
-                df = df.sort_values(self.time_col).reset_index(drop=True)
-                original_nulls = df[numeric_cols].isna()
-                df[numeric_cols] = df[numeric_cols].bfill()
-                df = self._mask_large_gaps(
-                    df, numeric_cols, forward=False, original_nulls=original_nulls
-                )
-                df = df.sort_values("_original_pos").drop(
-                    columns=["_original_pos"]).reset_index(drop=True)
+                # Use a UUID-based sentinel to avoid clobbering any user column
+                # and to guarantee uniqueness. try/finally ensures the column is
+                # always removed, even if an exception is raised mid-transform.
+                _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
+                try:
+                    df[_sentinel] = np.arange(len(df))
+                    df = df.sort_values(self.time_col).reset_index(drop=True)
+                    original_nulls = df[numeric_cols].isna()
+                    df[numeric_cols] = df[numeric_cols].bfill()
+                    df = self._mask_large_gaps(
+                        df, numeric_cols, forward=False, original_nulls=original_nulls
+                    )
+                    df = df.sort_values(_sentinel).reset_index(drop=True)
+                finally:
+                    df = df.drop(columns=[_sentinel], errors="ignore")
             else:
                 df[numeric_cols] = df[numeric_cols].bfill()
 
