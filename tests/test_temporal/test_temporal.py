@@ -33,6 +33,26 @@ def make_vitals_df(n_patients=3, n_hours=48, freq_minutes=60) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _make_long_df(n_items: int = 2, n_hours: int = 6) -> pd.DataFrame:
+    """
+    Build a minimal long-format DataFrame with multiple itemids so that
+    pd.pivot_table() produces a named columns axis that needs clearing.
+    """
+    base = datetime(2023, 1, 1)
+    item_ids = [220045 + i for i in range(n_items)]
+    rows = [
+        {
+            "subject_id": 1,
+            "charttime": base + timedelta(hours=h),
+            "itemid": item_id,
+            "valuenum": float(70 + h),
+        }
+        for h in range(n_hours)
+        for item_id in item_ids
+    ]
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------------------
 # TemporalWindower tests
 # ---------------------------------------------------------------------------
@@ -102,17 +122,79 @@ class TestTemporalWindower:
         col_names = [str(c) for c in result.columns]
         assert "220045" in col_names or 220045 in result.columns
 
-    def test_pivot_columns_name_is_none(self):
-        base = datetime(2023, 1, 1)
-        rows = [{"subject_id": 1, "charttime": base + timedelta(hours=h),
-                 "itemid": 220045, "valuenum": 70.0} for h in range(6)]
-        df = pd.DataFrame(rows)
+    def test_pivot_long_to_wide_clears_columns_name(self):
+        """
+        pd.pivot_table(..., columns="itemid") sets columns.name = "itemid".
+        _pivot_long_to_wide() must clear it to None.
+
+        The original test called fit_transform() and checked result.columns.name,
+        but fit_transform() builds its output via pd.DataFrame(list_of_dicts) whose
+        columns.name is always None — the pivot output is fully consumed before the
+        final DataFrame is created. This test calls _pivot_long_to_wide() directly
+        so it will fail if the `pivoted.columns.name = None` line is removed.
+        """
+        df = _make_long_df(n_items=3)
         windower = TemporalWindower(window_hours=6, step_hours=6)
-        result = windower.fit_transform(
-            df, id_col="subject_id", time_col="charttime",
-            item_col="itemid", value_col="valuenum",
+
+        pivoted = windower._pivot_long_to_wide(
+            df,
+            id_col="subject_id",
+            time_col="charttime",
+            item_col="itemid",
+            value_col="valuenum",
         )
-        assert result.columns.name is None
+
+        assert pivoted.columns.name is None, (
+            f"Expected columns.name=None after _pivot_long_to_wide(), "
+            f"got {pivoted.columns.name!r}. "
+            f"The line `pivoted.columns.name = None` may have been removed."
+        )
+
+    def test_pivot_preserves_all_item_columns(self):
+        """
+        Sanity: pivoted output has one column per unique itemid.
+        Ensures the pivot actually ran and columns.name = None
+        isn't just from an early return or passthrough.
+        """
+        n_items = 4
+        df = _make_long_df(n_items=n_items)
+        windower = TemporalWindower(window_hours=6, step_hours=6)
+
+        pivoted = windower._pivot_long_to_wide(
+            df,
+            id_col="subject_id",
+            time_col="charttime",
+            item_col="itemid",
+            value_col="valuenum",
+        )
+
+        assert pivoted.columns.name is None
+        feature_cols = [c for c in pivoted.columns if c not in ("subject_id", "charttime")]
+        assert len(feature_cols) == n_items, (
+            f"Expected {n_items} feature columns, got: {feature_cols}"
+        )
+
+    def test_pivot_columns_name_none_survives_reset_index(self):
+        """
+        reset_index() is called inside _pivot_long_to_wide() after the pivot.
+        Verify that columns.name = None is set AFTER reset_index() (which can
+        re-introduce a named axis), not before, and that index columns are
+        restored as regular columns.
+        """
+        df = _make_long_df(n_items=2)
+        windower = TemporalWindower(window_hours=6, step_hours=6)
+
+        pivoted = windower._pivot_long_to_wide(
+            df,
+            id_col="subject_id",
+            time_col="charttime",
+            item_col="itemid",
+            value_col="valuenum",
+        )
+
+        assert pivoted.columns.name is None
+        assert "subject_id" in pivoted.columns
+        assert "charttime" in pivoted.columns
 
     def test_feature_cols_auto_detected(self):
         base = datetime(2023, 1, 1)
@@ -402,6 +484,7 @@ class TestImputer:
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
         assert result["hr"].iloc[1] == pytest.approx(75.0)  # original value preserved
+
 
 # ---------------------------------------------------------------------------
 # LagFeatureBuilder tests

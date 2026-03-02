@@ -187,9 +187,9 @@ class Imputer:
         Re-introduce NaN where the gap between actual observations exceeds
         max_gap_hours, preventing stale carry-forward over long intervals.
         """
-        if self.time_col not in df.columns:
-            return df
-        assert self.max_gap_hours is not None
+        df = df.sort_values(self.time_col).reset_index(drop=True)
+        if original_nulls is not None:
+            original_nulls = original_nulls.reindex(df.index)
         time = pd.to_datetime(df[self.time_col])
         gap_hours = time.diff().dt.total_seconds() / 3600
 
