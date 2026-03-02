@@ -56,7 +56,7 @@ import pandas as pd
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
-from clinops.ingest.schema import ClinicalSchema, ColumnSpec, SchemaValidationError
+from clinops.ingest.schema import SchemaValidationError
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +134,7 @@ class MimicIIIConfig(BaseModel):
     @classmethod
     def path_must_exist(cls, v: Path) -> Path:
         if not v.exists():
-            raise ValueError(f"MIMIC-III path does not exist: {v}")
+            raise FileNotFoundError(f"MIMIC-III path does not exist: {v}")
         return v
 
 
@@ -333,11 +333,24 @@ class MimicIIILoader:
         df = self._filter(df, subject_ids, hadm_ids)
 
         if icd9_codes is not None:
-            df = df[df["icd9_code"].str.upper().isin(
-                [c.upper() for c in icd9_codes]
-            )]
+            if "icd9_code" in df.columns:
+                df = df[df["icd9_code"].str.upper().isin(
+                    [c.upper() for c in icd9_codes]
+                )]
+            else:
+                logger.warning(
+                    "Column 'icd9_code' missing from diagnoses_icd; "
+                    "skipping icd9_codes filter."
+                )
+
         if primary_only:
-            df = df[df["seq_num"] == 1]
+            if "seq_num" in df.columns:
+                df = df[df["seq_num"] == 1]
+            else:
+                logger.warning(
+                    "Column 'seq_num' missing from diagnoses_icd; "
+                    "cannot restrict to primary diagnoses."
+                )
 
         # Add synthetic icd_version for cross-dataset compatibility
         if "icd_version" not in df.columns:
@@ -516,19 +529,26 @@ class MimicIIILoader:
 
         if path.suffix == ".parquet":
             df = pd.read_parquet(path)
+        elif self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
+            chunks = pd.read_csv(path, low_memory=False, chunksize=self._cfg.chunk_size)
+            processed = []
+            for chunk in chunks:
+                chunk = _normalise_columns(chunk)
+                chunk = self._parse_datetimes(chunk, table_name)
+                self._validate_schema(chunk, table_name)
+                processed.append(chunk)
+            df = pd.concat(processed, ignore_index=True)
         else:
-            df = pd.read_csv(path, low_memory=False, **read_kwargs)
+            df = pd.read_csv(path, low_memory=False)
 
-        if isinstance(df, pd.DataFrame):
+        if isinstance(df, pd.DataFrame) and not (
+            self._cfg.chunk_size and table_name in {"chartevents", "labevents"}
+        ):
             df = _normalise_columns(df)
             if table_name == "diagnoses_icd" and "icd9_code" in df.columns:
                 df["icd9_code"] = df["icd9_code"].astype(str)
             df = self._parse_datetimes(df, table_name)
             self._validate_schema(df, table_name)
-            logger.debug(
-                f"Loaded MIMIC-III {table_name}: "
-                f"{len(df):,} rows, {len(df.columns)} cols"
-            )
 
         return df
 

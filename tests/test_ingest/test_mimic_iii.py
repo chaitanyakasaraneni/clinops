@@ -263,7 +263,9 @@ class TestDiagnosesIcd:
         assert len(df) == 1
 
     def test_filter_by_icd9_code_case_insensitive(self, loader):
-        assert len(loader.diagnoses_icd(icd9_codes=["4280"])) == 1
+        df = loader.diagnoses_icd(icd9_codes=["v053"])
+        assert len(df) == 1
+        assert df.iloc[0]["icd9_code"] == "V053"
 
     def test_filter_by_alphanumeric_icd9_code(self, loader):
         # V053 would be read as int by pandas if not cast — this catches regression
@@ -382,7 +384,7 @@ class TestDictionaries:
 
 class TestErrors:
     def test_missing_path_raises(self, tmp_path):
-        with pytest.raises(Exception):
+        with pytest.raises(FileNotFoundError):
             MimicIIILoader(tmp_path / "nonexistent")
 
     def test_missing_table_raises(self, tmp_path):
