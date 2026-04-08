@@ -123,8 +123,7 @@ class Imputer:
         """Apply imputation to df. Call fit() first for MEAN/MEDIAN strategies."""
         df = df.copy()
         numeric_cols = [
-            c for c in df.select_dtypes(include=[np.number]).columns
-            if c != self.id_col
+            c for c in df.select_dtypes(include=[np.number]).columns if c != self.id_col
         ]
 
         if self.strategy == ImputationStrategy.NONE:
@@ -216,8 +215,9 @@ class Imputer:
             for _, grp in df.groupby(self.id_col, sort=False):
                 grp = grp.sort_values(self.time_col)
                 original_nulls = grp[numeric_cols].isna()
-                grp[numeric_cols] = grp[
-                    numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
+                grp[numeric_cols] = (
+                    grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
+                )
                 grp = self._mask_large_gaps(
                     grp, numeric_cols, forward=forward, original_nulls=original_nulls
                 )
@@ -232,7 +232,10 @@ class Imputer:
             )
 
     def _mask_large_gaps(
-        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool,
+        self,
+        df: pd.DataFrame,
+        numeric_cols: list[str],
+        forward: bool,
         original_nulls: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """

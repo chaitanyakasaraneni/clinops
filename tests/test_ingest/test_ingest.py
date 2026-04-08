@@ -300,12 +300,14 @@ class TestFHIRLoader:
         import json
 
         (tmp_path / "patients.json").write_text(
-            json.dumps({
-                "resourceType": "Bundle",
-                "entry": [
-                    {"resource": {"resourceType": "Patient", "id": "p1", "gender": "male"}}
-                ],
-            })
+            json.dumps(
+                {
+                    "resourceType": "Bundle",
+                    "entry": [
+                        {"resource": {"resourceType": "Patient", "id": "p1", "gender": "male"}}
+                    ],
+                }
+            )
         )
         loader = FHIRLoader(tmp_path)
         df = loader.patients()
@@ -325,12 +327,14 @@ class TestFHIRLoader:
         import json
 
         (tmp_path / "patients.json").write_text(
-            json.dumps({
-                "resourceType": "Bundle",
-                "entry": [
-                    {"resource": {"resourceType": "Patient", "id": "p1", "gender": "male"}}
-                ],
-            })
+            json.dumps(
+                {
+                    "resourceType": "Bundle",
+                    "entry": [
+                        {"resource": {"resourceType": "Patient", "id": "p1", "gender": "male"}}
+                    ],
+                }
+            )
         )
         (tmp_path / "more_patients.ndjson").write_text(
             '{"resourceType": "Patient", "id": "p2", "gender": "female"}\n'
@@ -382,9 +386,7 @@ class TestFHIRLoader:
     def test_ndjson_skips_blank_lines(self, tmp_path):
         f = tmp_path / "patients.ndjson"
         f.write_text(
-            '{"resourceType": "Patient", "id": "p1"}\n'
-            '\n'
-            '{"resourceType": "Patient", "id": "p2"}\n'
+            '{"resourceType": "Patient", "id": "p1"}\n\n{"resourceType": "Patient", "id": "p2"}\n'
         )
         loader = FHIRLoader(f)
         df = loader.patients()
@@ -393,8 +395,7 @@ class TestFHIRLoader:
     def test_ndjson_skips_wrong_resource_type(self, tmp_path):
         f = tmp_path / "mixed.ndjson"
         f.write_text(
-            '{"resourceType": "Patient", "id": "p1"}\n'
-            '{"resourceType": "Observation", "id": "o1"}\n'
+            '{"resourceType": "Patient", "id": "p1"}\n{"resourceType": "Observation", "id": "o1"}\n'
         )
         loader = FHIRLoader(f)
         df = loader.patients()
@@ -406,7 +407,7 @@ class TestFHIRLoader:
         f = tmp_path / "bad.ndjson"
         f.write_text(
             '{"resourceType": "Patient", "id": "p1"}\n'
-            'THIS IS NOT JSON\n'
+            "THIS IS NOT JSON\n"
             '{"resourceType": "Patient", "id": "p2"}\n'
         )
         loader = FHIRLoader(f)

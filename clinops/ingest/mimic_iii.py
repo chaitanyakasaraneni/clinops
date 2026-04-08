@@ -63,6 +63,7 @@ from clinops.ingest.schema import SchemaValidationError
 # Column name normalisation
 # ---------------------------------------------------------------------------
 
+
 #: MIMIC-III uses uppercase column names; normalise to lowercase so DataFrames
 #: are compatible with MIMIC-IV loaders and downstream clinops transforms.
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -98,19 +99,24 @@ _REQUIRED_COLS: dict[str, list[str]] = {
     "icustays": ["subject_id", "hadm_id", "icustay_id", "intime", "outtime", "los"],
     "prescriptions": ["subject_id", "hadm_id", "startdate", "drug"],
     "inputevents_mv": [
-        "subject_id", "hadm_id", "icustay_id", "itemid", "starttime", "amount", "amountuom"
+        "subject_id",
+        "hadm_id",
+        "icustay_id",
+        "itemid",
+        "starttime",
+        "amount",
+        "amountuom",
     ],
 }
 
 #: Datetime columns per table (post-normalisation, lowercase).
 _DATETIME_COLS: dict[str, list[str]] = {
-    "chartevents":    ["charttime"],
-    "labevents":      ["charttime"],
-    "admissions":     ["admittime", "dischtime", "deathtime", "edregtime",
-                       "edouttime"],
-    "diagnoses_icd":  [],
-    "icustays":       ["intime", "outtime"],
-    "prescriptions":  ["startdate", "enddate"],
+    "chartevents": ["charttime"],
+    "labevents": ["charttime"],
+    "admissions": ["admittime", "dischtime", "deathtime", "edregtime", "edouttime"],
+    "diagnoses_icd": [],
+    "icustays": ["intime", "outtime"],
+    "prescriptions": ["startdate", "enddate"],
     "inputevents_mv": ["starttime", "endtime"],
     "inputevents_cv": ["charttime"],
 }
@@ -119,6 +125,7 @@ _DATETIME_COLS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 class MimicIIIConfig(BaseModel):
     """Validated configuration for MimicIIILoader."""
@@ -138,6 +145,7 @@ class MimicIIIConfig(BaseModel):
 # ---------------------------------------------------------------------------
 # MimicIIILoader
 # ---------------------------------------------------------------------------
+
 
 class MimicIIILoader:
     """
@@ -185,9 +193,7 @@ class MimicIIILoader:
             strict_validation=strict_validation,
             chunk_size=chunk_size,
         )
-        logger.info(
-            f"MimicIIILoader initialised — path={self._cfg.mimic_path}"
-        )
+        logger.info(f"MimicIIILoader initialised — path={self._cfg.mimic_path}")
 
     # ------------------------------------------------------------------
     # Public table accessors
@@ -230,7 +236,9 @@ class MimicIIILoader:
         """
         df = self._load("chartevents")
         return self._filter(
-            df, subject_ids, hadm_ids,
+            df,
+            subject_ids,
+            hadm_ids,
             icustay_ids=icustay_ids,
             item_ids=item_ids,
             start_time=start_time,
@@ -266,15 +274,16 @@ class MimicIIILoader:
         """
         df = self._load("labevents")
         df = self._filter(
-            df, subject_ids, hadm_ids,
+            df,
+            subject_ids,
+            hadm_ids,
             item_ids=item_ids,
             start_time=start_time,
             end_time=end_time,
             time_col="charttime",
         )
         if not with_ref_range:
-            drop = [c for c in ["ref_range_lower", "ref_range_upper"]
-                    if c in df.columns]
+            drop = [c for c in ["ref_range_lower", "ref_range_upper"] if c in df.columns]
             df = df.drop(columns=drop)
         return df
 
@@ -331,13 +340,10 @@ class MimicIIILoader:
 
         if icd9_codes is not None:
             if "icd9_code" in df.columns:
-                df = df[df["icd9_code"].str.upper().isin(
-                    [c.upper() for c in icd9_codes]
-                )]
+                df = df[df["icd9_code"].str.upper().isin([c.upper() for c in icd9_codes])]
             else:
                 logger.warning(
-                    "Column 'icd9_code' missing from diagnoses_icd; "
-                    "skipping icd9_codes filter."
+                    "Column 'icd9_code' missing from diagnoses_icd; skipping icd9_codes filter."
                 )
 
         if primary_only:
@@ -432,16 +438,17 @@ class MimicIIILoader:
             timestamp) and ``source`` (``"mv"`` or ``"cv"``).
         """
         if source not in {"mv", "cv", "both"}:
-            raise ValueError(
-                f"source must be 'mv', 'cv', or 'both' — got {source!r}"
-            )
+            raise ValueError(f"source must be 'mv', 'cv', or 'both' — got {source!r}")
 
         dfs: list[pd.DataFrame] = []
         if source in {"mv", "both"}:
             df_mv = self._load("inputevents_mv")
             dfs.append(
                 self._filter(
-                    df_mv, subject_ids, hadm_ids, icustay_ids=icustay_ids,
+                    df_mv,
+                    subject_ids,
+                    hadm_ids,
+                    icustay_ids=icustay_ids,
                     time_col="starttime",
                 )
             )
@@ -449,7 +456,10 @@ class MimicIIILoader:
             df_cv = self._load("inputevents_cv")
             dfs.append(
                 self._filter(
-                    df_cv, subject_ids, hadm_ids, icustay_ids=icustay_ids,
+                    df_cv,
+                    subject_ids,
+                    hadm_ids,
+                    icustay_ids=icustay_ids,
                     time_col="charttime",
                 )
             )
@@ -583,10 +593,7 @@ class MimicIIILoader:
         missing = [c for c in required if c not in df.columns]
         if not missing:
             return
-        msg = (
-            f"MIMIC-III table '{table_name}' missing required columns: "
-            f"{missing}"
-        )
+        msg = f"MIMIC-III table '{table_name}' missing required columns: {missing}"
         if self._cfg.strict_validation:
             raise SchemaValidationError(msg)
         logger.warning(msg)
@@ -612,8 +619,7 @@ class MimicIIILoader:
             df = df[df["itemid"].isin(item_ids)]
 
         col = time_col or next(
-            (c for c in ["charttime", "starttime", "admittime"]
-             if c in df.columns),
+            (c for c in ["charttime", "starttime", "admittime"] if c in df.columns),
             None,
         )
         if col and col in df.columns:

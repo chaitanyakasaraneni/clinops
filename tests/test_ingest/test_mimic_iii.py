@@ -17,6 +17,7 @@ from clinops.ingest.mimic_iii import MimicIIILoader
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _write_csvs(tmp_path):
     """Write minimal MIMIC-III-style CSV files (uppercase columns, flat dir)."""
 
@@ -126,6 +127,7 @@ def loader(mimic3_dir):
 # Column normalisation
 # ---------------------------------------------------------------------------
 
+
 class TestColumnNormalisation:
     def test_chartevents_columns_lowercase(self, loader):
         df = loader.chartevents()
@@ -143,6 +145,7 @@ class TestColumnNormalisation:
 # ---------------------------------------------------------------------------
 # chartevents
 # ---------------------------------------------------------------------------
+
 
 class TestChartevents:
     def test_loads_all_rows(self, loader):
@@ -183,14 +186,14 @@ class TestChartevents:
 
     def test_required_columns_present(self, loader):
         df = loader.chartevents()
-        for col in ["subject_id", "hadm_id", "icustay_id", "itemid",
-                    "charttime", "valuenum"]:
+        for col in ["subject_id", "hadm_id", "icustay_id", "itemid", "charttime", "valuenum"]:
             assert col in df.columns
 
 
 # ---------------------------------------------------------------------------
 # labevents
 # ---------------------------------------------------------------------------
+
 
 class TestLabevents:
     def test_loads_all_rows(self, loader):
@@ -218,6 +221,7 @@ class TestLabevents:
 # admissions
 # ---------------------------------------------------------------------------
 
+
 class TestAdmissions:
     def test_loads_all_rows(self, loader):
         assert len(loader.admissions()) == 2
@@ -227,14 +231,13 @@ class TestAdmissions:
         assert len(df) == 1
 
     def test_admittime_is_datetime(self, loader):
-        assert pd.api.types.is_datetime64_any_dtype(
-            loader.admissions()["admittime"]
-        )
+        assert pd.api.types.is_datetime64_any_dtype(loader.admissions()["admittime"])
 
 
 # ---------------------------------------------------------------------------
 # diagnoses_icd
 # ---------------------------------------------------------------------------
+
 
 class TestDiagnosesIcd:
     def test_loads_all_rows(self, loader):
@@ -282,6 +285,7 @@ class TestDiagnosesIcd:
 # icustays
 # ---------------------------------------------------------------------------
 
+
 class TestIcustays:
     def test_loads_all_rows(self, loader):
         assert len(loader.icustays()) == 2
@@ -309,6 +313,7 @@ class TestIcustays:
 # prescriptions
 # ---------------------------------------------------------------------------
 
+
 class TestPrescriptions:
     def test_loads_all_rows(self, loader):
         assert len(loader.prescriptions()) == 3
@@ -325,14 +330,13 @@ class TestPrescriptions:
         assert len(loader.prescriptions(drugs=["heparin"])) == 1
 
     def test_startdate_is_datetime(self, loader):
-        assert pd.api.types.is_datetime64_any_dtype(
-            loader.prescriptions()["startdate"]
-        )
+        assert pd.api.types.is_datetime64_any_dtype(loader.prescriptions()["startdate"])
 
 
 # ---------------------------------------------------------------------------
 # inputevents
 # ---------------------------------------------------------------------------
+
 
 class TestInputevents:
     def test_mv_loads(self, loader):
@@ -396,6 +400,7 @@ class TestInputevents:
 # Dictionaries
 # ---------------------------------------------------------------------------
 
+
 class TestDictionaries:
     def test_d_items_loads(self, loader):
         df = loader.d_items()
@@ -417,9 +422,11 @@ class TestDictionaries:
 # Error handling
 # ---------------------------------------------------------------------------
 
+
 class TestErrors:
     def test_missing_path_raises(self, tmp_path):
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError, match="does not exist"):
             MimicIIILoader(tmp_path / "nonexistent")
 
@@ -432,18 +439,17 @@ class TestErrors:
     def test_strict_validation_raises_on_missing_cols(self, tmp_path):
         # Write a chartevents CSV missing required 'valuenum'
         (tmp_path / "CHARTEVENTS.csv").write_text(
-            "SUBJECT_ID,HADM_ID,ICUSTAY_ID,ITEMID,CHARTTIME\n"
-            "1,100,1000,211,2150-01-01 06:00:00\n"
+            "SUBJECT_ID,HADM_ID,ICUSTAY_ID,ITEMID,CHARTTIME\n1,100,1000,211,2150-01-01 06:00:00\n"
         )
         loader = MimicIIILoader(tmp_path, strict_validation=True)
         from clinops.ingest.schema import SchemaValidationError
+
         with pytest.raises(SchemaValidationError):
             loader.chartevents()
 
     def test_non_strict_warns_on_missing_cols(self, tmp_path):
         (tmp_path / "CHARTEVENTS.csv").write_text(
-            "SUBJECT_ID,HADM_ID,ICUSTAY_ID,ITEMID,CHARTTIME\n"
-            "1,100,1000,211,2150-01-01 06:00:00\n"
+            "SUBJECT_ID,HADM_ID,ICUSTAY_ID,ITEMID,CHARTTIME\n1,100,1000,211,2150-01-01 06:00:00\n"
         )
         loader = MimicIIILoader(tmp_path, strict_validation=False)
         df = loader.chartevents()  # should not raise

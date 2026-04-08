@@ -193,6 +193,7 @@ class TestDiagnosesIcd:
 
     def test_loads_from_parquet(self, mimic_dir):
         import pandas as pd
+
         csv_path = mimic_dir / "hosp" / "diagnoses_icd.csv"
         df_orig = pd.read_csv(csv_path)
         csv_path.unlink()

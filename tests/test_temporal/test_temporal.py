@@ -115,8 +115,11 @@ class TestTemporalWindower:
         df = pd.DataFrame(rows)
         windower = TemporalWindower(window_hours=6, step_hours=6)
         result = windower.fit_transform(
-            df, id_col="subject_id", time_col="charttime",
-            item_col="itemid", value_col="valuenum",
+            df,
+            id_col="subject_id",
+            time_col="charttime",
+            item_col="itemid",
+            value_col="valuenum",
         )
         assert len(result) > 0
         col_names = [str(c) for c in result.columns]
@@ -198,12 +201,14 @@ class TestTemporalWindower:
 
     def test_feature_cols_auto_detected(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1] * 6,
-            "charttime": [base + timedelta(hours=h) for h in range(6)],
-            "heart_rate": [70.0] * 6,
-            "spo2": [97.0] * 6,
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1] * 6,
+                "charttime": [base + timedelta(hours=h) for h in range(6)],
+                "heart_rate": [70.0] * 6,
+                "spo2": [97.0] * 6,
+            }
+        )
         windower = TemporalWindower(window_hours=6, step_hours=6)
         result = windower.fit_transform(df, id_col="subject_id", time_col="charttime")
         assert "heart_rate" in result.columns
@@ -211,14 +216,18 @@ class TestTemporalWindower:
 
     def test_missing_feature_col_produces_nan(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1] * 6,
-            "charttime": [base + timedelta(hours=h) for h in range(6)],
-            "heart_rate": [70.0] * 6,
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1] * 6,
+                "charttime": [base + timedelta(hours=h) for h in range(6)],
+                "heart_rate": [70.0] * 6,
+            }
+        )
         windower = TemporalWindower(window_hours=6, step_hours=6)
         result = windower.fit_transform(
-            df, id_col="subject_id", time_col="charttime",
+            df,
+            id_col="subject_id",
+            time_col="charttime",
             feature_cols=["heart_rate", "nonexistent"],
         )
         assert "nonexistent" in result.columns
@@ -226,11 +235,13 @@ class TestTemporalWindower:
 
     def test_all_nan_feature_within_window_gives_nan(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 1],
-            "charttime": [base + timedelta(hours=h) for h in range(3)],
-            "heart_rate": [np.nan, np.nan, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "charttime": [base + timedelta(hours=h) for h in range(3)],
+                "heart_rate": [np.nan, np.nan, np.nan],
+            }
+        )
         windower = TemporalWindower(window_hours=6, step_hours=6, min_observations=1)
         result = windower.fit_transform(
             df, id_col="subject_id", time_col="charttime", feature_cols=["heart_rate"]
@@ -240,7 +251,8 @@ class TestTemporalWindower:
     def test_callable_aggregation(self):
         df = make_vitals_df(n_patients=1, n_hours=12)
         windower = TemporalWindower(
-            window_hours=6, step_hours=6,
+            window_hours=6,
+            step_hours=6,
             aggregations={"heart_rate": lambda s: s.quantile(0.9)},
         )
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
@@ -249,11 +261,13 @@ class TestTemporalWindower:
 
     def test_median_aggregation(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 1],
-            "charttime": [base + timedelta(hours=h) for h in range(3)],
-            "heart_rate": [70.0, 80.0, 90.0],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "charttime": [base + timedelta(hours=h) for h in range(3)],
+                "heart_rate": [70.0, 80.0, 90.0],
+            }
+        )
         windower = TemporalWindower(
             window_hours=6, step_hours=6, aggregations={"heart_rate": "median"}
         )
@@ -262,11 +276,13 @@ class TestTemporalWindower:
 
     def test_last_aggregation(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 1],
-            "charttime": [base + timedelta(hours=h) for h in range(3)],
-            "heart_rate": [70.0, 75.0, 80.0],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "charttime": [base + timedelta(hours=h) for h in range(3)],
+                "heart_rate": [70.0, 75.0, 80.0],
+            }
+        )
         windower = TemporalWindower(
             window_hours=6, step_hours=6, aggregations={"heart_rate": "last"}
         )
@@ -275,11 +291,13 @@ class TestTemporalWindower:
 
     def test_first_aggregation(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 1],
-            "charttime": [base + timedelta(hours=h) for h in range(3)],
-            "heart_rate": [70.0, 75.0, 80.0],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "charttime": [base + timedelta(hours=h) for h in range(3)],
+                "heart_rate": [70.0, 75.0, 80.0],
+            }
+        )
         windower = TemporalWindower(
             window_hours=6, step_hours=6, aggregations={"heart_rate": "first"}
         )
@@ -288,11 +306,13 @@ class TestTemporalWindower:
 
     def test_unknown_aggregation_falls_back_to_mean(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 1],
-            "charttime": [base + timedelta(hours=h) for h in range(3)],
-            "heart_rate": [70.0, 80.0, 90.0],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "charttime": [base + timedelta(hours=h) for h in range(3)],
+                "heart_rate": [70.0, 80.0, 90.0],
+            }
+        )
         windower = TemporalWindower(
             window_hours=6, step_hours=6, aggregations={"heart_rate": "p95"}
         )
@@ -301,12 +321,14 @@ class TestTemporalWindower:
 
     def test_label_col_extracted_as_last_value(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1] * 4,
-            "charttime": [base + timedelta(hours=h) for h in range(4)],
-            "heart_rate": [70.0] * 4,
-            "outcome": [0, 0, 0, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1] * 4,
+                "charttime": [base + timedelta(hours=h) for h in range(4)],
+                "heart_rate": [70.0] * 4,
+                "outcome": [0, 0, 0, 1],
+            }
+        )
         windower = TemporalWindower(window_hours=6, step_hours=6, label_col="outcome")
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert "label" in result.columns
@@ -314,14 +336,17 @@ class TestTemporalWindower:
 
     def test_custom_label_fn_applied(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1] * 4,
-            "charttime": [base + timedelta(hours=h) for h in range(4)],
-            "heart_rate": [70.0] * 4,
-            "outcome": [0, 1, 0, 1],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1] * 4,
+                "charttime": [base + timedelta(hours=h) for h in range(4)],
+                "heart_rate": [70.0] * 4,
+                "outcome": [0, 1, 0, 1],
+            }
+        )
         windower = TemporalWindower(
-            window_hours=6, step_hours=6,
+            window_hours=6,
+            step_hours=6,
             label_col="outcome",
             label_fn=lambda s: int(s.max()),
         )
@@ -330,12 +355,14 @@ class TestTemporalWindower:
 
     def test_label_col_all_nan_gives_nan_label(self):
         base = datetime(2023, 1, 1)
-        df = pd.DataFrame({
-            "subject_id": [1] * 4,
-            "charttime": [base + timedelta(hours=h) for h in range(4)],
-            "heart_rate": [70.0] * 4,
-            "outcome": [np.nan, np.nan, np.nan, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1] * 4,
+                "charttime": [base + timedelta(hours=h) for h in range(4)],
+                "heart_rate": [70.0] * 4,
+                "outcome": [np.nan, np.nan, np.nan, np.nan],
+            }
+        )
         windower = TemporalWindower(window_hours=6, step_hours=6, label_col="outcome")
         result = windower.fit_transform(df, "subject_id", "charttime", ["heart_rate"])
         assert "label" in result.columns
@@ -421,7 +448,8 @@ class TestImputer:
     def test_forward_fill_gap_exceeding_threshold_renulled(self):
         # 6h gap > 4h threshold: ffill fills NaN then gap masking re-nulls it
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)]
+        )
         df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -430,7 +458,8 @@ class TestImputer:
     def test_forward_fill_gap_within_threshold_kept(self):
         # 2h gap < 4h threshold: fill should persist
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)]
+        )
         df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -438,7 +467,8 @@ class TestImputer:
 
     def test_backward_fill_gap_exceeding_threshold_renulled(self):
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)]
+        )
         df = pd.DataFrame({"time": times, "hr": [np.nan, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -447,7 +477,8 @@ class TestImputer:
 
     def test_backward_fill_gap_within_threshold_kept(self):
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 4)]
+        )
         df = pd.DataFrame({"time": times, "hr": [np.nan, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -479,7 +510,8 @@ class TestImputer:
 
     def test_originally_non_null_values_not_masked(self):
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 12)]
+        )
         df = pd.DataFrame({"time": times, "hr": [70.0, 75.0, 80.0]})  # no NaNs
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -490,7 +522,8 @@ class TestImputer:
         # Gap masking must apply correctly (based on sorted time gaps) AND
         # the result must come back in the original input order.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)])
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)]
+        )
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, 70.0]})  # reversed order
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -499,15 +532,16 @@ class TestImputer:
         assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 06:00")
         assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
         # Gap masking: 06:00 NaN has 6h gap from 00:00 > 4h → stays NaN
-        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 12:00 — original
-        assert pd.isna(result["hr"].iloc[1])                  # 06:00 — gap too large, re-nulled
-        assert result["hr"].iloc[2] == pytest.approx(70.0)   # 00:00 — original
+        assert result["hr"].iloc[0] == pytest.approx(80.0)  # 12:00 — original
+        assert pd.isna(result["hr"].iloc[1])  # 06:00 — gap too large, re-nulled
+        assert result["hr"].iloc[2] == pytest.approx(70.0)  # 00:00 — original
 
     def test_forward_fill_gap_within_threshold_correct_on_unsorted_input(self):
         # Same unsorted setup but gap is within threshold — fill should persist.
         # Input order must be preserved in the result.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)])
+            [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)]
+        )
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, 70.0]})  # reversed
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -515,15 +549,16 @@ class TestImputer:
         assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 04:00")
         assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 02:00")
         assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
-        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 04:00 — original
-        assert result["hr"].iloc[1] == pytest.approx(70.0)   # 02:00 — filled (2h < 4h)
-        assert result["hr"].iloc[2] == pytest.approx(70.0)   # 00:00 — original
+        assert result["hr"].iloc[0] == pytest.approx(80.0)  # 04:00 — original
+        assert result["hr"].iloc[1] == pytest.approx(70.0)  # 02:00 — filled (2h < 4h)
+        assert result["hr"].iloc[2] == pytest.approx(70.0)  # 00:00 — original
 
     def test_backward_fill_gap_masking_correct_on_unsorted_input(self):
         # Rows delivered in reverse chronological order.
         # Gap masking must apply correctly AND result must come back in input order.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)])
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 6), datetime(2023, 1, 1, 0)]
+        )
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})  # reversed
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -533,14 +568,15 @@ class TestImputer:
         assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
         # Both NaNs: 06:00 is 6h from 12:00 > 4h → stays NaN;
         #            00:00 is 12h from 12:00 > 4h → stays NaN
-        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 12:00 — original
-        assert pd.isna(result["hr"].iloc[1])                  # 06:00 — gap too large
-        assert pd.isna(result["hr"].iloc[2])                  # 00:00 — gap too large
+        assert result["hr"].iloc[0] == pytest.approx(80.0)  # 12:00 — original
+        assert pd.isna(result["hr"].iloc[1])  # 06:00 — gap too large
+        assert pd.isna(result["hr"].iloc[2])  # 00:00 — gap too large
 
     def test_backward_fill_gap_within_threshold_correct_on_unsorted_input(self):
         # Gap within threshold — fill should persist. Input order must be preserved.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)])
+            [datetime(2023, 1, 1, 4), datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 0)]
+        )
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})  # reversed
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
         result = imputer.fit_transform(df)
@@ -548,9 +584,9 @@ class TestImputer:
         assert result["time"].iloc[0] == pd.Timestamp("2023-01-01 04:00")
         assert result["time"].iloc[1] == pd.Timestamp("2023-01-01 02:00")
         assert result["time"].iloc[2] == pd.Timestamp("2023-01-01 00:00")
-        assert result["hr"].iloc[0] == pytest.approx(80.0)   # 04:00 — original
-        assert result["hr"].iloc[1] == pytest.approx(80.0)   # 02:00 — filled (2h < 4h)
-        assert result["hr"].iloc[2] == pytest.approx(80.0)   # 00:00 — filled (4h <= 4h)
+        assert result["hr"].iloc[0] == pytest.approx(80.0)  # 04:00 — original
+        assert result["hr"].iloc[1] == pytest.approx(80.0)  # 02:00 — filled (2h < 4h)
+        assert result["hr"].iloc[2] == pytest.approx(80.0)  # 00:00 — filled (4h <= 4h)
 
     def test_forward_fill_gap_masking_preserves_input_row_order(self):
         # transform() must return rows in the same order they were passed in,
@@ -558,7 +594,8 @@ class TestImputer:
         # sort_values() was not reversed, so callers relying on positional
         # iloc would get silently wrong results.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)])
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)]
+        )
         # Input order: 12:00, 00:00, 06:00 (deliberately shuffled)
         df = pd.DataFrame({"time": times, "hr": [80.0, 70.0, np.nan]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=4, time_col="time")
@@ -572,7 +609,8 @@ class TestImputer:
 
     def test_backward_fill_gap_masking_preserves_input_row_order(self):
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)])
+            [datetime(2023, 1, 1, 12), datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 6)]
+        )
         # Input order: 12:00, 00:00, 06:00 (shuffled)
         df = pd.DataFrame({"time": times, "hr": [80.0, np.nan, np.nan]})
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=4, time_col="time")
@@ -590,7 +628,8 @@ class TestImputer:
         # should be re-nulled. With truthiness check (if self.max_gap_hours),
         # 0 was treated as falsey and gap masking was silently skipped entirely.
         times = pd.to_datetime(
-            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1), datetime(2023, 1, 1, 2)])
+            [datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1), datetime(2023, 1, 1, 2)]
+        )
         df = pd.DataFrame({"time": times, "hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=0, time_col="time")
         result = imputer.fit_transform(df)
@@ -601,18 +640,26 @@ class TestImputer:
         # Patient 1: hr=70 at 00:00, NaN at 01:00
         # Patient 2: hr=NaN at 02:00, hr=90 at 03:00
         # Without grouping, ffill would propagate patient 1's hr=70 into patient 2's NaN.
-        times = pd.to_datetime([
-            datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1),
-            datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 3),
-        ])
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 2, 2],
-            "time": times,
-            "hr": [70.0, np.nan, np.nan, 90.0],
-        })
+        times = pd.to_datetime(
+            [
+                datetime(2023, 1, 1, 0),
+                datetime(2023, 1, 1, 1),
+                datetime(2023, 1, 1, 2),
+                datetime(2023, 1, 1, 3),
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 2],
+                "time": times,
+                "hr": [70.0, np.nan, np.nan, 90.0],
+            }
+        )
         imputer = Imputer(
-            ImputationStrategy.FORWARD_FILL, max_gap_hours=4,
-            time_col="time", id_col="subject_id",
+            ImputationStrategy.FORWARD_FILL,
+            max_gap_hours=4,
+            time_col="time",
+            id_col="subject_id",
         )
         result = imputer.fit_transform(df)
         assert result.loc[result["subject_id"] == 1, "hr"].iloc[1] == pytest.approx(70.0)
@@ -622,18 +669,26 @@ class TestImputer:
         # Patient 1: hr=NaN at 00:00, hr=80 at 01:00
         # Patient 2: hr=90 at 02:00, hr=NaN at 03:00
         # Without grouping, bfill would propagate patient 2's hr=90 into patient 1's NaN.
-        times = pd.to_datetime([
-            datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1),
-            datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 3),
-        ])
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 2, 2],
-            "time": times,
-            "hr": [np.nan, 80.0, 90.0, np.nan],
-        })
+        times = pd.to_datetime(
+            [
+                datetime(2023, 1, 1, 0),
+                datetime(2023, 1, 1, 1),
+                datetime(2023, 1, 1, 2),
+                datetime(2023, 1, 1, 3),
+            ]
+        )
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 2],
+                "time": times,
+                "hr": [np.nan, 80.0, 90.0, np.nan],
+            }
+        )
         imputer = Imputer(
-            ImputationStrategy.BACKWARD_FILL, max_gap_hours=4,
-            time_col="time", id_col="subject_id",
+            ImputationStrategy.BACKWARD_FILL,
+            max_gap_hours=4,
+            time_col="time",
+            id_col="subject_id",
         )
         result = imputer.fit_transform(df)
         assert result.loc[result["subject_id"] == 1, "hr"].iloc[0] == pytest.approx(80.0)
@@ -642,20 +697,24 @@ class TestImputer:
     def test_forward_fill_without_max_gap_respects_entity_boundary(self):
         # Without max_gap_hours, ffill still should not cross entity boundaries
         # when id_col is provided.
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 2, 2],
-            "hr": [70.0, np.nan, np.nan, 90.0],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 2],
+                "hr": [70.0, np.nan, np.nan, 90.0],
+            }
+        )
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, id_col="subject_id")
         result = imputer.fit_transform(df)
         assert result.loc[result["subject_id"] == 1, "hr"].iloc[1] == pytest.approx(70.0)
         assert pd.isna(result.loc[result["subject_id"] == 2, "hr"].iloc[0])
 
     def test_backward_fill_without_max_gap_respects_entity_boundary(self):
-        df = pd.DataFrame({
-            "subject_id": [1, 1, 2, 2],
-            "hr": [np.nan, 80.0, 90.0, np.nan],
-        })
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 2],
+                "hr": [np.nan, 80.0, 90.0, np.nan],
+            }
+        )
         imputer = Imputer(ImputationStrategy.BACKWARD_FILL, id_col="subject_id")
         result = imputer.fit_transform(df)
         assert result.loc[result["subject_id"] == 1, "hr"].iloc[0] == pytest.approx(80.0)
