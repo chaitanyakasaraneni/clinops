@@ -597,6 +597,70 @@ class TestImputer:
         # Any gap > 0h means re-null: the filled NaN at 01:00 must be restored
         assert pd.isna(result["hr"].iloc[1])
 
+    def test_forward_fill_does_not_cross_entity_boundary_with_max_gap(self):
+        # Patient 1: hr=70 at 00:00, NaN at 01:00
+        # Patient 2: hr=NaN at 02:00, hr=90 at 03:00
+        # Without grouping, ffill would propagate patient 1's hr=70 into patient 2's NaN.
+        times = pd.to_datetime([
+            datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1),
+            datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 3),
+        ])
+        df = pd.DataFrame({
+            "subject_id": [1, 1, 2, 2],
+            "time": times,
+            "hr": [70.0, np.nan, np.nan, 90.0],
+        })
+        imputer = Imputer(
+            ImputationStrategy.FORWARD_FILL, max_gap_hours=4,
+            time_col="time", id_col="subject_id",
+        )
+        result = imputer.fit_transform(df)
+        assert result.loc[result["subject_id"] == 1, "hr"].iloc[1] == pytest.approx(70.0)
+        assert pd.isna(result.loc[result["subject_id"] == 2, "hr"].iloc[0])
+
+    def test_backward_fill_does_not_cross_entity_boundary_with_max_gap(self):
+        # Patient 1: hr=NaN at 00:00, hr=80 at 01:00
+        # Patient 2: hr=90 at 02:00, hr=NaN at 03:00
+        # Without grouping, bfill would propagate patient 2's hr=90 into patient 1's NaN.
+        times = pd.to_datetime([
+            datetime(2023, 1, 1, 0), datetime(2023, 1, 1, 1),
+            datetime(2023, 1, 1, 2), datetime(2023, 1, 1, 3),
+        ])
+        df = pd.DataFrame({
+            "subject_id": [1, 1, 2, 2],
+            "time": times,
+            "hr": [np.nan, 80.0, 90.0, np.nan],
+        })
+        imputer = Imputer(
+            ImputationStrategy.BACKWARD_FILL, max_gap_hours=4,
+            time_col="time", id_col="subject_id",
+        )
+        result = imputer.fit_transform(df)
+        assert result.loc[result["subject_id"] == 1, "hr"].iloc[0] == pytest.approx(80.0)
+        assert pd.isna(result.loc[result["subject_id"] == 2, "hr"].iloc[1])
+
+    def test_forward_fill_without_max_gap_respects_entity_boundary(self):
+        # Without max_gap_hours, ffill still should not cross entity boundaries
+        # when id_col is provided.
+        df = pd.DataFrame({
+            "subject_id": [1, 1, 2, 2],
+            "hr": [70.0, np.nan, np.nan, 90.0],
+        })
+        imputer = Imputer(ImputationStrategy.FORWARD_FILL, id_col="subject_id")
+        result = imputer.fit_transform(df)
+        assert result.loc[result["subject_id"] == 1, "hr"].iloc[1] == pytest.approx(70.0)
+        assert pd.isna(result.loc[result["subject_id"] == 2, "hr"].iloc[0])
+
+    def test_backward_fill_without_max_gap_respects_entity_boundary(self):
+        df = pd.DataFrame({
+            "subject_id": [1, 1, 2, 2],
+            "hr": [np.nan, 80.0, 90.0, np.nan],
+        })
+        imputer = Imputer(ImputationStrategy.BACKWARD_FILL, id_col="subject_id")
+        result = imputer.fit_transform(df)
+        assert result.loc[result["subject_id"] == 1, "hr"].iloc[0] == pytest.approx(80.0)
+        assert pd.isna(result.loc[result["subject_id"] == 2, "hr"].iloc[1])
+
 
 # ---------------------------------------------------------------------------
 # LagFeatureBuilder tests

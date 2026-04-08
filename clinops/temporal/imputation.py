@@ -122,7 +122,10 @@ class Imputer:
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply imputation to df. Call fit() first for MEAN/MEDIAN strategies."""
         df = df.copy()
-        numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if c != self.id_col
+        ]
 
         if self.strategy == ImputationStrategy.NONE:
             return df
@@ -138,17 +141,15 @@ class Imputer:
                 _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
                 try:
                     df[_sentinel] = np.arange(len(df))
-                    df = df.sort_values(self.time_col).reset_index(drop=True)
-                    original_nulls = df[numeric_cols].isna()
-                    df[numeric_cols] = df[numeric_cols].ffill()
-                    df = self._mask_large_gaps(
-                        df, numeric_cols, forward=True, original_nulls=original_nulls
-                    )
+                    df = self._fill_with_gap_mask(df, numeric_cols, forward=True)
                     df = df.sort_values(_sentinel).reset_index(drop=True)
                 finally:
                     df = df.drop(columns=[_sentinel], errors="ignore")
             else:
-                df[numeric_cols] = df[numeric_cols].ffill()
+                if self.id_col and self.id_col in df.columns:
+                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].ffill()
+                else:
+                    df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
             if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
@@ -158,17 +159,15 @@ class Imputer:
                 _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
                 try:
                     df[_sentinel] = np.arange(len(df))
-                    df = df.sort_values(self.time_col).reset_index(drop=True)
-                    original_nulls = df[numeric_cols].isna()
-                    df[numeric_cols] = df[numeric_cols].bfill()
-                    df = self._mask_large_gaps(
-                        df, numeric_cols, forward=False, original_nulls=original_nulls
-                    )
+                    df = self._fill_with_gap_mask(df, numeric_cols, forward=False)
                     df = df.sort_values(_sentinel).reset_index(drop=True)
                 finally:
                     df = df.drop(columns=[_sentinel], errors="ignore")
             else:
-                df[numeric_cols] = df[numeric_cols].bfill()
+                if self.id_col and self.id_col in df.columns:
+                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].bfill()
+                else:
+                    df[numeric_cols] = df[numeric_cols].bfill()
 
         elif self.strategy == ImputationStrategy.LINEAR:
             df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")
@@ -201,6 +200,35 @@ class Imputer:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _fill_with_gap_mask(
+        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool
+    ) -> pd.DataFrame:
+        """
+        Apply ffill/bfill with gap masking.
+
+        When ``id_col`` is set the fill and masking are applied within each
+        entity group, preventing values from propagating across entity
+        boundaries (e.g. across patients or admissions).
+        """
+        if self.id_col and self.id_col in df.columns:
+            parts = []
+            for _, grp in df.groupby(self.id_col, sort=False):
+                grp = grp.sort_values(self.time_col)
+                original_nulls = grp[numeric_cols].isna()
+                grp[numeric_cols] = grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
+                grp = self._mask_large_gaps(
+                    grp, numeric_cols, forward=forward, original_nulls=original_nulls
+                )
+                parts.append(grp)
+            return pd.concat(parts)
+        else:
+            df = df.sort_values(self.time_col)
+            original_nulls = df[numeric_cols].isna()
+            df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
+            return self._mask_large_gaps(
+                df, numeric_cols, forward=forward, original_nulls=original_nulls
+            )
 
     def _mask_large_gaps(
         self, df: pd.DataFrame, numeric_cols: list[str], forward: bool,
