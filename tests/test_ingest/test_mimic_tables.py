@@ -182,6 +182,32 @@ class TestDiagnosesIcd:
         versions = set(df["icd_version"].astype(str))
         assert "9" in versions and "10" in versions
 
+    def test_filter_by_hadm(self, loader):
+        df = loader.diagnoses_icd(hadm_ids=[100])
+        assert len(df) == 2
+        assert set(df["hadm_id"]) == {100}
+
+    def test_filter_by_hadm_no_match(self, loader):
+        df = loader.diagnoses_icd(hadm_ids=[999])
+        assert len(df) == 0
+
+    def test_loads_from_parquet(self, mimic_dir):
+        import pandas as pd
+        csv_path = mimic_dir / "hosp" / "diagnoses_icd.csv"
+        df_orig = pd.read_csv(csv_path)
+        csv_path.unlink()
+        df_orig.to_parquet(mimic_dir / "hosp" / "diagnoses_icd.parquet", index=False)
+        ldr = MimicTableLoader(mimic_dir)
+        df = ldr.diagnoses_icd()
+        assert len(df) == 4
+        assert "icd_code" in df.columns
+
+    def test_missing_file_raises(self, mimic_dir):
+        (mimic_dir / "hosp" / "diagnoses_icd.csv").unlink()
+        ldr = MimicTableLoader(mimic_dir)
+        with pytest.raises(FileNotFoundError, match="diagnoses_icd"):
+            ldr.diagnoses_icd()
+
 
 # ---------------------------------------------------------------------------
 # icustays
@@ -234,3 +260,17 @@ class TestSummary:
             "diagnoses_icd",
             "icustays",
         }
+
+    def test_missing_tables_appear_with_zero_rows(self, tmp_path):
+        # Only chartevents present; all other tables absent → hits except branch
+        (tmp_path / "hosp").mkdir()
+        (tmp_path / "icu").mkdir()
+        (tmp_path / "icu" / "chartevents.csv").write_text(
+            "subject_id,hadm_id,stay_id,itemid,charttime,valuenum,valueuom\n"
+            "1,100,1000,220045,2150-01-01 06:00:00,72.0,bpm\n"
+        )
+        ldr = MimicTableLoader(tmp_path)
+        result = ldr.summary()
+        missing = result[result["rows_sampled"] == 0]
+        assert len(missing) >= 1
+        assert missing["null_rate_pct"].isna().all()
