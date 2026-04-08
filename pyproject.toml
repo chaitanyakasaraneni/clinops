@@ -79,6 +79,10 @@ strict                 = true
 ignore_missing_imports = true
 exclude                = ["^tests/", "^examples/", "^venv/"]
 
+[[tool.mypy.overrides]]
+module = "clinops.orchestrate.*"
+disallow_untyped_calls = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts   = "--cov=clinops --cov-report=term-missing --cov-report=xml"

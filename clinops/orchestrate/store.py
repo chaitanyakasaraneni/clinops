@@ -174,7 +174,7 @@ class GCSPipelineStore:
                 ) from exc
 
             if self.credentials_path:
-                creds = service_account.Credentials.from_service_account_file(  # type: ignore
+                creds = service_account.Credentials.from_service_account_file(
                     self.credentials_path
                 )
                 self._client = storage.Client(credentials=creds)
