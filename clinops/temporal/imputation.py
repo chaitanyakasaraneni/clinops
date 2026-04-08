@@ -210,6 +210,7 @@ class Imputer:
         entity group, preventing values from propagating across entity
         boundaries (e.g. across patients or admissions).
         """
+        assert self.time_col is not None  # callers guard this
         if self.id_col and self.id_col in df.columns:
             parts = []
             for _, grp in df.groupby(self.id_col, sort=False):

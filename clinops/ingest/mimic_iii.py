@@ -553,7 +553,7 @@ class MimicIIILoader:
         path = self._resolve_path(table_name)
         logger.debug(f"Loading MIMIC-III {table_name} from {path}")
 
-        read_kwargs: dict = {}
+        read_kwargs: dict[str, object] = {}
         if self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
             read_kwargs["chunksize"] = self._cfg.chunk_size
 
