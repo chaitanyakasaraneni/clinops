@@ -140,7 +140,7 @@ class Imputer:
                 _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
                 try:
                     df[_sentinel] = np.arange(len(df))
-                    df = self._fill_with_gap_mask(df, numeric_cols, forward=True)
+                    df = self._fill_with_gap_mask(df, numeric_cols, self.time_col, forward=True)
                     df = df.sort_values(_sentinel).reset_index(drop=True)
                 finally:
                     df = df.drop(columns=[_sentinel], errors="ignore")
@@ -158,7 +158,7 @@ class Imputer:
                 _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
                 try:
                     df[_sentinel] = np.arange(len(df))
-                    df = self._fill_with_gap_mask(df, numeric_cols, forward=False)
+                    df = self._fill_with_gap_mask(df, numeric_cols, self.time_col, forward=False)
                     df = df.sort_values(_sentinel).reset_index(drop=True)
                 finally:
                     df = df.drop(columns=[_sentinel], errors="ignore")
@@ -201,7 +201,7 @@ class Imputer:
     # ------------------------------------------------------------------
 
     def _fill_with_gap_mask(
-        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool
+        self, df: pd.DataFrame, numeric_cols: list[str], time_col: str, forward: bool
     ) -> pd.DataFrame:
         """
         Apply ffill/bfill with gap masking.
@@ -210,11 +210,10 @@ class Imputer:
         entity group, preventing values from propagating across entity
         boundaries (e.g. across patients or admissions).
         """
-        assert self.time_col is not None  # callers guard this
         if self.id_col and self.id_col in df.columns:
             parts = []
             for _, grp in df.groupby(self.id_col, sort=False):
-                grp = grp.sort_values(self.time_col)
+                grp = grp.sort_values(time_col)
                 original_nulls = grp[numeric_cols].isna()
                 grp[numeric_cols] = (
                     grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
@@ -225,7 +224,7 @@ class Imputer:
                 parts.append(grp)
             return pd.concat(parts)
         else:
-            df = df.sort_values(self.time_col)
+            df = df.sort_values(time_col)
             original_nulls = df[numeric_cols].isna()
             df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
             return self._mask_large_gaps(
