@@ -10,6 +10,7 @@ tuned for clinical context.
 
 from __future__ import annotations
 
+import uuid
 from enum import StrEnum
 
 import numpy as np
@@ -121,7 +122,10 @@ class Imputer:
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply imputation to df. Call fit() first for MEAN/MEDIAN strategies."""
         df = df.copy()
-        numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if c != self.id_col
+        ]
 
         if self.strategy == ImputationStrategy.NONE:
             return df
@@ -130,14 +134,40 @@ class Imputer:
             df[numeric_cols] = df[numeric_cols].fillna(0.0)
 
         elif self.strategy == ImputationStrategy.FORWARD_FILL:
-            df[numeric_cols] = df[numeric_cols].ffill()
-            if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                df = self._mask_large_gaps(df, numeric_cols, forward=True)
+            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
+                # Use a UUID-based sentinel to avoid clobbering any user column
+                # and to guarantee uniqueness. try/finally ensures the column is
+                # always removed, even if an exception is raised mid-transform.
+                _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
+                try:
+                    df[_sentinel] = np.arange(len(df))
+                    df = self._fill_with_gap_mask(df, numeric_cols, forward=True)
+                    df = df.sort_values(_sentinel).reset_index(drop=True)
+                finally:
+                    df = df.drop(columns=[_sentinel], errors="ignore")
+            else:
+                if self.id_col and self.id_col in df.columns:
+                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].ffill()
+                else:
+                    df[numeric_cols] = df[numeric_cols].ffill()
 
         elif self.strategy == ImputationStrategy.BACKWARD_FILL:
-            df[numeric_cols] = df[numeric_cols].bfill()
-            if self.max_gap_hours and self.time_col and self.time_col in df.columns:
-                df = self._mask_large_gaps(df, numeric_cols, forward=False)
+            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
+                # Use a UUID-based sentinel to avoid clobbering any user column
+                # and to guarantee uniqueness. try/finally ensures the column is
+                # always removed, even if an exception is raised mid-transform.
+                _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
+                try:
+                    df[_sentinel] = np.arange(len(df))
+                    df = self._fill_with_gap_mask(df, numeric_cols, forward=False)
+                    df = df.sort_values(_sentinel).reset_index(drop=True)
+                finally:
+                    df = df.drop(columns=[_sentinel], errors="ignore")
+            else:
+                if self.id_col and self.id_col in df.columns:
+                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].bfill()
+                else:
+                    df[numeric_cols] = df[numeric_cols].bfill()
 
         elif self.strategy == ImputationStrategy.LINEAR:
             df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")
@@ -171,8 +201,38 @@ class Imputer:
     # Internal
     # ------------------------------------------------------------------
 
-    def _mask_large_gaps(
+    def _fill_with_gap_mask(
         self, df: pd.DataFrame, numeric_cols: list[str], forward: bool
+    ) -> pd.DataFrame:
+        """
+        Apply ffill/bfill with gap masking.
+
+        When ``id_col`` is set the fill and masking are applied within each
+        entity group, preventing values from propagating across entity
+        boundaries (e.g. across patients or admissions).
+        """
+        if self.id_col and self.id_col in df.columns:
+            parts = []
+            for _, grp in df.groupby(self.id_col, sort=False):
+                grp = grp.sort_values(self.time_col)
+                original_nulls = grp[numeric_cols].isna()
+                grp[numeric_cols] = grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
+                grp = self._mask_large_gaps(
+                    grp, numeric_cols, forward=forward, original_nulls=original_nulls
+                )
+                parts.append(grp)
+            return pd.concat(parts)
+        else:
+            df = df.sort_values(self.time_col)
+            original_nulls = df[numeric_cols].isna()
+            df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
+            return self._mask_large_gaps(
+                df, numeric_cols, forward=forward, original_nulls=original_nulls
+            )
+
+    def _mask_large_gaps(
+        self, df: pd.DataFrame, numeric_cols: list[str], forward: bool,
+        original_nulls: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
         """
         Re-introduce NaN where the gap between actual observations exceeds
@@ -185,11 +245,12 @@ class Imputer:
         gap_hours = time.diff().dt.total_seconds() / 3600
 
         for col in numeric_cols:
-            original_null = df[col].copy()
+            # Use pre-fill nulls when provided; fall back to current column state
+            was_null_before_fill = (
+                original_nulls[col] if original_nulls is not None else df[col].isna()
+            )
             max_gap = self.max_gap_hours
             large_gap = gap_hours > max_gap if forward else gap_hours.shift(-1).fillna(0) > max_gap
-            # Mask filled values that crossed a large gap
-            was_null_before_fill = original_null.isna()
             df.loc[was_null_before_fill & large_gap, col] = np.nan
 
         return df

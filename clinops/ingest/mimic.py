@@ -263,7 +263,10 @@ class MimicLoader:
         else:
             df = pd.read_csv(path, low_memory=False, **read_kwargs)
 
-        if not self._cfg.chunk_size:
+        if isinstance(df, pd.DataFrame) and (
+            path.suffix == ".parquet"
+            or not (self._cfg.chunk_size and table_name in {"chartevents", "labevents"})
+        ):
             self._validate_schema(table_name, df)
             df = self._parse_datetimes(table_name, df)
 
