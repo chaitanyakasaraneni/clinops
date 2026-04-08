@@ -216,7 +216,8 @@ class Imputer:
             for _, grp in df.groupby(self.id_col, sort=False):
                 grp = grp.sort_values(self.time_col)
                 original_nulls = grp[numeric_cols].isna()
-                grp[numeric_cols] = grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
+                grp[numeric_cols] = grp[
+                    numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
                 grp = self._mask_large_gaps(
                     grp, numeric_cols, forward=forward, original_nulls=original_nulls
                 )
