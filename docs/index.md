@@ -19,6 +19,8 @@ Every healthcare AI project starts with the same two weeks of plumbing: loading 
 | [`clinops.preprocess`](guide/preprocess.md) | Outlier clipping with physiological bounds, unit normalization, ICD-9→10 mapping |
 | [`clinops.temporal`](guide/temporal.md) | Sliding/tumbling windows, gap-aware imputation, lag features, cohort alignment |
 | [`clinops.split`](guide/split.md) | Temporal, patient-level, and stratified patient train/test splitting |
+| [`clinops.monitor`](guide/monitor.md) | Distribution drift detection (PSI + KS) and data quality alerting for production pipelines |
+| [`clinops.orchestrate`](guide/orchestrate.md) | GCS/S3 artifact storage and AWS Step Functions pipeline builder |
 
 ## Quickstart
 

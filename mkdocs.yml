@@ -66,9 +66,13 @@ nav:
       - Preprocess: guide/preprocess.md
       - Temporal: guide/temporal.md
       - Split: guide/split.md
+      - Monitor: guide/monitor.md
+      - Orchestrate: guide/orchestrate.md
   - API Reference:
       - clinops.ingest: api/ingest.md
       - clinops.preprocess: api/preprocess.md
       - clinops.temporal: api/temporal.md
       - clinops.split: api/split.md
+      - clinops.monitor: api/monitor.md
+      - clinops.orchestrate: api/orchestrate.md
   - Contributing: contributing.md
