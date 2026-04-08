@@ -1,0 +1,74 @@
+site_name: clinops
+site_description: Clinical ML Pipeline Toolkit — production-grade data loading, preprocessing, and time-series feature engineering for healthcare AI research.
+site_url: https://clinops.readthedocs.io
+repo_url: https://github.com/chaitanyakasaraneni/clinops
+repo_name: chaitanyakasaraneni/clinops
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            separate_signature: true
+            merge_init_into_class: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+      - Ingest: guide/ingest.md
+      - Preprocess: guide/preprocess.md
+      - Temporal: guide/temporal.md
+      - Split: guide/split.md
+  - API Reference:
+      - clinops.ingest: api/ingest.md
+      - clinops.preprocess: api/preprocess.md
+      - clinops.temporal: api/temporal.md
+      - clinops.split: api/split.md
+  - Contributing: contributing.md
