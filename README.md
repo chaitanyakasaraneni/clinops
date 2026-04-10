@@ -8,6 +8,9 @@ and time-series feature engineering for healthcare AI research.
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Tests](https://github.com/chaitanyakasaraneni/clinops/actions/workflows/ci.yml/badge.svg)](https://github.com/chaitanyakasaraneni/clinops/actions)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psych/black)
+[![Documentation](https://readthedocs.org/projects/clinops/badge/?version=latest)](https://clinops.readthedocs.io/)
+
+**Docs:** https://clinops.readthedocs.io/ &nbsp;|&nbsp; **PyPI:** https://pypi.org/project/clinops/
 
 ---
 
