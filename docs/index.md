@@ -57,6 +57,13 @@ result = StratifiedPatientSplitter(
 ).split(windows)
 ```
 
+## Examples
+
+- [Getting started notebook](examples.md#01--getting-started) — module-by-module walkthrough with synthetic data, no MIMIC access needed
+- [ICU mortality pipeline notebook](examples.md#02--icu-mortality-prediction-pipeline) — end-to-end pipeline from raw EHR tables to ML-ready arrays
+
+---
+
 ## Installation
 
 Requires Python **3.12+**.
