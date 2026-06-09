@@ -348,7 +348,11 @@ class EicuLoader:
             if path.suffix == ".parquet":
                 import pyarrow.parquet as pq
 
-                available: list[str] = pq.read_schema(path).names
+                # pyarrow.parquet.read_schema lacks a return annotation, so
+                # mypy --strict flags the call; the result is a pyarrow Schema.
+                available: list[str] = list(
+                    pq.read_schema(path).names  # type: ignore[no-untyped-call]
+                )
             else:
                 available = list(pd.read_csv(path, nrows=0).columns)
             usecols = [c for c in available if c in wanted]
@@ -753,7 +757,8 @@ class EicuTableLoader:
         except FileNotFoundError:
             logger.warning("carePlanGeneral not found; skipping DNR exclusion")
             return set()
-        if "cplitemvalue" not in cpg.columns or "cplitemoffset" not in cpg.columns:
+        required = {"cplitemvalue", "cplitemoffset", "patientunitstayid"}
+        if not required.issubset(cpg.columns):
             logger.warning("carePlanGeneral missing expected columns; skipping DNR exclusion")
             return set()
         # Restrict to the care-limitation group so the same text appearing in an
@@ -1193,25 +1198,29 @@ class EicuTableLoader:
             ``X`` has shape ``(n_windows, observation_hours, 22)``;
             ``y`` has shape ``(n_windows, 5)`` (one binary label per organ).
         """
-        # Apply per-call overrides to the config for the duration of the build,
-        # then restore — so a one-off call never silently mutates the loader's
-        # state, and the overrides reach every consumer consistently (the grid
-        # via max_icu_hours, the windowing via observation/prediction_hours, and
-        # the baselines via baseline_hours, which all read from self._cfg).
+        # Apply per-call overrides for the duration of the build, then restore —
+        # so a one-off call never silently mutates the loader's state, and the
+        # overrides reach every consumer consistently (the grid via
+        # max_icu_hours, the windowing via observation/prediction_hours, and the
+        # baselines via baseline_hours, all read from self._cfg). Overrides are
+        # routed through a fresh EicuCohortConfig so they are validated the same
+        # way as the constructor (positive values; observation + prediction <=
+        # max_icu_hours) rather than silently producing empty/invalid windows.
         overrides = {
             "observation_hours": observation_hours,
             "prediction_hours": prediction_hours,
             "max_icu_hours": max_icu_hours,
         }
         overrides = {k: v for k, v in overrides.items() if v is not None}
-        saved = {k: getattr(self._cfg, k) for k in overrides}
-        for k, v in overrides.items():
-            setattr(self._cfg, k, v)
+        if not overrides:
+            return self._build_sequences_impl()
+
+        saved_cfg = self._cfg
+        self._cfg = EicuCohortConfig(**{**saved_cfg.model_dump(), **overrides})
         try:
             return self._build_sequences_impl()
         finally:
-            for k, v in saved.items():
-                setattr(self._cfg, k, v)
+            self._cfg = saved_cfg
 
     def _build_sequences_impl(self) -> tuple[np.ndarray, np.ndarray]:
         obs = self._cfg.observation_hours

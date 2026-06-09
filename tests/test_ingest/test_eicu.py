@@ -614,3 +614,24 @@ def test_build_sequences_does_not_mutate_config(eicu_dir: Path):
     loader.build_sequences(observation_hours=3, prediction_hours=2, max_icu_hours=6)
     after = (cfg.max_icu_hours, cfg.observation_hours, cfg.prediction_hours)
     assert before == after == (8, 2, 1)
+
+
+def test_build_sequences_rejects_invalid_override(eicu_dir: Path):
+    loader = EicuTableLoader(eicu_dir, config=TEST_CFG)
+    with pytest.raises(ValueError, match="must be positive"):
+        loader.build_sequences(observation_hours=0)
+    with pytest.raises(ValueError, match="max_icu_hours"):
+        # observation + prediction (8 + 4) exceeds max_icu_hours (8)
+        loader.build_sequences(observation_hours=8, prediction_hours=4)
+
+
+def test_dnr_skips_when_columns_missing(tmp_path: Path):
+    # A malformed carePlanGeneral (no patientunitstayid) must skip cleanly,
+    # not raise KeyError.
+    d = tmp_path / "eicu-crd"
+    d.mkdir()
+    pd.DataFrame({"cplgroup": ["Care Limitation"], "cplitemvalue": ["Do not resuscitate"]}).to_csv(
+        d / "carePlanGeneral.csv", index=False
+    )
+    loader = EicuTableLoader(d, config=TEST_CFG)
+    assert loader._dnr_stays(within_minutes=360) == set()
