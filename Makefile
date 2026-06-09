@@ -25,7 +25,7 @@ help:
 	@echo "  make version  print the current version"
 	@echo "  make tag      create git tag v$(CURRENT_VERSION)"
 	@echo "  make test     run pytest"
-	@echo "  make lint     run ruff + black --check + mypy"
+	@echo "  make lint     run ruff check + ruff format --check + mypy"
 	@echo "  make build    build sdist + wheel"
 	@echo "  make clean    remove build artifacts"
 
@@ -69,7 +69,7 @@ test:
 
 lint:
 	@ruff check $(PKG)/ tests/
-	@black --check $(PKG)/ tests/
+	@ruff format --check $(PKG)/ tests/
 	@mypy $(PKG)/
 
 build:

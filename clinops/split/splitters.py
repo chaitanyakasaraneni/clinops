@@ -193,11 +193,18 @@ class GroupedPatientSplitter:
         rng = np.random.default_rng(self.random_state)
         groups = df[self.group_col].unique()
         n = len(groups)
+        if n < 3:
+            raise ValueError(
+                f"GroupedPatientSplitter requires at least 3 groups for a "
+                f"non-empty three-way split, got {n} (group_col='{self.group_col}')."
+            )
         shuffled = rng.permutation(groups)
 
+        # Each fold gets at least one group; the guard below only adjusts when
+        # rounding would overshoot, and with n >= 3 it always leaves train >= 1.
         n_test = max(1, round(n * self.test_size))
         n_val = max(1, round(n * self.val_size))
-        if n_test + n_val >= n:  # tiny-cohort guard: leave at least one for train
+        if n_test + n_val >= n:
             n_val = max(1, min(n_val, n - 2))
             n_test = max(1, min(n_test, n - n_val - 1))
 

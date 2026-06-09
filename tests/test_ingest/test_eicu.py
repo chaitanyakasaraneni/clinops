@@ -44,12 +44,10 @@ TEST_CFG = EicuCohortConfig(
     max_icu_hours=8,
     observation_hours=2,
     prediction_hours=1,
+    baseline_hours=3,
     missingness_threshold=0.50,
     first_stay_only=True,
 )
-
-# Stays included by the cohort filters (adults, first stay, LOS >= 4h, low miss).
-_GOOD_STAYS = [101, 301, 401]  # P1 (normal), P3 (age > 89), P4 (missing GCS)
 
 
 def _vital_rows(stay: int, *, low_map: bool = False) -> pd.DataFrame:
@@ -537,3 +535,82 @@ def test_grouped_split_is_deterministic():
     a = GroupedPatientSplitter(random_state=7).split(df)
     b = GroupedPatientSplitter(random_state=7).split(df)
     assert set(a.test["uniquepid"]) == set(b.test["uniquepid"])
+
+
+@pytest.mark.parametrize("n_groups", [1, 2])
+def test_grouped_split_raises_for_tiny_cohort(n_groups):
+    # A three-way split is impossible with <3 groups; must raise, not return an
+    # empty train fold.
+    df = pd.DataFrame({"uniquepid": [f"P{i}" for i in range(n_groups)]})
+    with pytest.raises(ValueError, match="at least 3 groups"):
+        GroupedPatientSplitter().split(df)
+
+
+# ---------------------------------------------------------------------------
+# Config validation
+# ---------------------------------------------------------------------------
+
+
+def test_config_rejects_window_larger_than_horizon():
+    # observation_hours + prediction_hours must fit within max_icu_hours.
+    with pytest.raises(ValueError, match="max_icu_hours"):
+        EicuCohortConfig(max_icu_hours=8, observation_hours=24, prediction_hours=6)
+
+
+def test_config_rejects_nonpositive_and_out_of_range():
+    with pytest.raises(ValueError, match="must be positive"):
+        EicuCohortConfig(min_los_hours=0)
+    with pytest.raises(ValueError, match="missingness_threshold"):
+        EicuCohortConfig(missingness_threshold=1.5)
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for review fixes
+# ---------------------------------------------------------------------------
+
+
+def test_dnr_filter_respects_care_limitation_group(tmp_path: Path):
+    # Only DNR rows in the 'Care Limitation' group, within the window, exclude.
+    d = tmp_path / "eicu-crd"
+    d.mkdir()
+    pd.DataFrame(
+        {
+            "cplgeneralid": [1, 2, 3],
+            "patientunitstayid": [1, 2, 3],
+            "cplitemoffset": [60, 60, 5000],
+            "cplgroup": ["Care Limitation", "Care Plan General", "Care Limitation"],
+            "cplitemvalue": ["Do not resuscitate", "Do not resuscitate", "Do not resuscitate"],
+        }
+    ).to_csv(d / "carePlanGeneral.csv", index=False)
+    loader = EicuTableLoader(d, config=TEST_CFG)
+    dnr = loader._dnr_stays(within_minutes=360)
+    assert dnr == {1}  # stay 2: wrong group; stay 3: outside the 6h window
+
+
+def test_load_large_columns_on_parquet(tmp_path: Path):
+    # `columns=` must work for Parquet-backed tables (no CSV reader on .parquet).
+    pytest.importorskip("pyarrow")
+    d = tmp_path / "eicu-crd"
+    d.mkdir()
+    _vital_rows(101).to_parquet(d / "vitalPeriodic.parquet", index=False)
+    loader = EicuLoader(d)
+    out = loader.load_vital_periodic(patient_unit_stay_ids=[101], columns=["heartrate", "sao2"])
+    assert {"patientunitstayid", "heartrate", "sao2"} <= set(out.columns)
+    assert (out["patientunitstayid"] == 101).all()
+
+
+def test_build_sequences_does_not_mutate_config(eicu_dir: Path):
+    cfg = EicuCohortConfig(
+        min_age=18,
+        min_los_hours=4,
+        max_icu_hours=8,
+        observation_hours=2,
+        prediction_hours=1,
+        baseline_hours=3,
+        missingness_threshold=0.50,
+    )
+    loader = EicuTableLoader(eicu_dir, config=cfg)
+    before = (cfg.max_icu_hours, cfg.observation_hours, cfg.prediction_hours)
+    loader.build_sequences(observation_hours=3, prediction_hours=2, max_icu_hours=6)
+    after = (cfg.max_icu_hours, cfg.observation_hours, cfg.prediction_hours)
+    assert before == after == (8, 2, 1)
