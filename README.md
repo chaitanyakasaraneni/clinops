@@ -35,7 +35,7 @@ multi-cloud environments.
 
 | Module | What it does |
 |---|---|
-| `clinops.ingest` | Loaders for MIMIC-IV, FHIR R4, and flat CSV/Parquet with schema validation. Includes `MimicTableLoader` with pre-built schemas for the five tables researchers always need. |
+| `clinops.ingest` | Loaders for MIMIC-IV, MIMIC-III, eICU-CRD, FHIR R4, and flat CSV/Parquet with schema validation. Includes `MimicTableLoader` (pre-built MIMIC schemas) and `EicuTableLoader` (offset-based multi-centre ICU feature/label/sequence builder). |
 | `clinops.temporal` | Sliding/tumbling windows, gap-aware imputation, lag features, cohort alignment |
 | `clinops.preprocess` | Outlier clipping with physiological bounds, unit normalization (mg/dL ↔ mmol/L etc.), ICD-9→10 mapping |
 | `clinops.split` | Temporal, patient-level, and stratified patient train/test splitting |
@@ -112,6 +112,36 @@ charts = loader.chartevents(
 labs  = loader.labevents(subject_ids=[10000032, 10000980])
 stays = loader.icustays(subject_ids=[10000032, 10000980])
 ```
+
+### Load eICU-CRD (multi-centre external validation)
+
+eICU stores time as **integer minute offsets** from ICU admission, ages over 89
+as the string `"> 89"`, and labs in long free-text format across 208 hospitals.
+`EicuTableLoader` normalises all of that into the same canonical feature matrix
+the MIMIC pipeline produces — so cross-site validation is a few lines:
+
+```python
+from clinops.ingest import EicuTableLoader
+from clinops.split import GroupedPatientSplitter
+
+loader = EicuTableLoader("/data/eicu-crd")
+
+# 22-feature hourly sequences (7 vitals, 9 labs, 3 derived, 3 treatment) +
+# 5 physiology-only organ-deterioration labels — with a programmatic leakage
+# guard that refuses to emit label-defining variables as features.
+X, y = loader.build_sequences(observation_hours=24, prediction_hours=6)
+
+# Patient-grouped 70/15/15 split: uniquepid (patient) ≠ patientunitstayid (stay),
+# so all stays for one patient stay in the same fold (no leakage).
+meta = loader.build_cohort()[["uniquepid", "patientunitstayid", "unittype"]]
+split = GroupedPatientSplitter(
+    group_col="uniquepid", stay_col="patientunitstayid",
+    val_size=0.15, test_size=0.15, random_state=42,
+).split(meta)
+```
+
+Large tables (`vitalPeriodic`, `nurseCharting`, `lab`, …) are read in chunks, so
+the 6–11 GB files never have to fit in memory.
 
 ### Load FHIR R4 resources
 
@@ -372,6 +402,8 @@ pip install -e ".[dev]"       # development
 | Source | Format |
 |---|---|
 | MIMIC-IV v2.0–v2.2 | CSV, CSV.GZ, Parquet |
+| MIMIC-III v1.4 | CSV, CSV.GZ, Parquet |
+| eICU-CRD v2.0 | CSV, CSV.GZ, Parquet |
 | FHIR R4 | JSON Bundle, NDJSON |
 | Flat files | CSV, CSV.GZ, Parquet |
 

@@ -26,15 +26,19 @@ StratifiedPatientSplitter
 """
 
 from clinops.split.splitters import (
+    GroupedPatientSplitter,
     PatientSplitter,
     SplitResult,
     StratifiedPatientSplitter,
     TemporalSplitter,
+    TriSplitResult,
 )
 
 __all__ = [
     "TemporalSplitter",
     "PatientSplitter",
     "StratifiedPatientSplitter",
+    "GroupedPatientSplitter",
     "SplitResult",
+    "TriSplitResult",
 ]

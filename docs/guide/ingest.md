@@ -106,6 +106,56 @@ patients = loader.patients()
 
 ---
 
+## eICU-CRD (`EicuLoader` / `EicuTableLoader`)
+
+The [eICU Collaborative Research Database](https://eicu-crd.mit.edu/) is a
+multi-centre ICU dataset (208 US hospitals, ~200k unit stays). It differs from
+MIMIC in ways that break naïve loaders, all handled here:
+
+| eICU quirk | How clinops handles it |
+|---|---|
+| Time is **minutes from ICU admission** (`observationoffset`), not datetimes | All temporal logic uses `offset // 60` hour bins |
+| `age` is a **string**; `> 89` for de-identified elders | `parse_eicu_age` → 90.0 |
+| `uniquepid` (patient) ≠ `patientunitstayid` (stay) | `GroupedPatientSplitter` groups by patient |
+| Labs are **long-format free text** (`labname`) | Harmonised via `eicu_lab_map`; unmapped names warn, never crash |
+| GCS lives in `nurseCharting` (`Scores`), not `lab` | Extracted and merged automatically |
+| DNR status lives in `carePlanGeneral`, not `diagnosis` | Cohort excludes DNR-within-6h from the correct table |
+| `vitalPeriodic` / `nurseCharting` are 6–11 GB | Chunked reads; files never fully held in memory |
+
+### Low-level table access
+
+```python
+from clinops.ingest import EicuLoader
+
+loader = EicuLoader("/data/eicu-crd", chunk_size=100_000)
+pt     = loader.load_patient()                                  # small, read whole
+vitals = loader.load_vital_periodic(patient_unit_stay_ids=[141168])  # chunked
+labs   = loader.load_lab(patient_unit_stay_ids=[141168],
+                         labnames=["creatinine", "lactate"])    # chunked + filtered
+```
+
+### ICHI-compatible feature/label/sequence builder
+
+```python
+from clinops.ingest import EicuTableLoader, EicuCohortConfig
+
+cfg    = EicuCohortConfig(min_los_hours=48, max_icu_hours=72,
+                          observation_hours=24, prediction_hours=6,
+                          hospital_ids=None)        # restrict sites for subgroup analysis
+loader = EicuTableLoader("/data/eicu-crd", config=cfg)
+
+cohort   = loader.build_cohort()          # one row per included stay (+ apache_ii)
+features = loader.build_feature_matrix()  # hourly 22-feature matrix (leakage-guarded)
+labels   = loader.build_labels()          # 5 organ-deterioration labels per stay-hour
+X, y     = loader.build_sequences()       # (n, 24, 22) and (n, 5)
+```
+
+The feature matrix is checked against a programmatic exclusion list before it is
+returned — if a label-defining variable (e.g. a patient's baseline creatinine or
+the PaO2/FiO2 ratio) ever reaches the feature set, a `LeakageError` is raised.
+
+---
+
 ## FlatFileLoader
 
 Load and validate any flat CSV or Parquet file with a custom schema.
