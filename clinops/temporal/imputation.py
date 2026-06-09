@@ -10,12 +10,14 @@ tuned for clinical context.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from enum import StrEnum
 
 import numpy as np
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 class ImputationStrategy(StrEnum):

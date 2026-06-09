@@ -8,15 +8,17 @@ fixed-size feature windows suitable for ML model training.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from loguru import logger
 
 from clinops.temporal.imputation import ImputationStrategy, Imputer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

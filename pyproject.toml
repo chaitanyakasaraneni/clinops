@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clinops"
-version = "0.3.0"
+version = "0.4.0"
 description = "Clinical ML Pipeline Toolkit — bridging raw clinical data and production-ready ML pipelines"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -32,7 +32,6 @@ dependencies = [
     "pydantic>=2.5",
     "scipy>=1.11",
     "scikit-learn>=1.4",
-    "loguru>=0.7",
 ]
 
 [project.optional-dependencies]

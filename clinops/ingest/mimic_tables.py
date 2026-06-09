@@ -33,14 +33,16 @@ Example
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
-from loguru import logger
 
 from clinops.ingest.mimic import MimicLoader
 from clinops.ingest.schema import ClinicalSchema, ColumnSpec
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Pre-built schemas

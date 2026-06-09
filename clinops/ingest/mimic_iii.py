@@ -50,14 +50,16 @@ Sci Data 3, 160035 (2016). https://doi.org/10.1038/sdata.2016.35
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
 import pandas as pd
-from loguru import logger
 from pydantic import BaseModel, field_validator
 
 from clinops.ingest.schema import SchemaValidationError
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Column name normalisation

@@ -19,11 +19,13 @@ S3 requires ``pip install clinops[aws]`` (boto3).
 from __future__ import annotations
 
 import io
+import logging
 from enum import StrEnum
 from typing import Any
 
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 class StorageFormat(StrEnum):
