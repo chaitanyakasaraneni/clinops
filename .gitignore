@@ -209,3 +209,12 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Credentialed clinical datasets — MUST NEVER be committed (PhysioNet DUA)
+# eICU-CRD, MIMIC-III/IV, and any raw PhysioNet download trees.
+eicu-crd/
+eicu-collaborative-research-database*/
+mimic-iii*/
+mimic-iv*/
+*.csv.gz
+# Note: synthetic test fixtures live under tests/ and are committed intentionally.

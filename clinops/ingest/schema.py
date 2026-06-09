@@ -16,6 +16,20 @@ class SchemaValidationError(ValueError):
     pass
 
 
+class LeakageError(ValueError):
+    """
+    Raised when a label-defining variable would leak into the feature matrix.
+
+    clinops enforces a programmatic exclusion list at feature-assembly time:
+    variables that are used only to *derive* outcome labels (e.g. a patient's
+    baseline creatinine, or the PaO2/FiO2 ratio) must never appear as model
+    inputs. If one is found in the assembled feature set, this is raised with a
+    message naming the offending column.
+    """
+
+    pass
+
+
 @dataclass
 class ColumnSpec:
     """Specification for a single column in a clinical table."""

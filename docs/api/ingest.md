@@ -6,6 +6,12 @@
 
 ::: clinops.ingest.mimic_iii.MimicIIILoader
 
+::: clinops.ingest.eicu.EicuLoader
+
+::: clinops.ingest.eicu.EicuTableLoader
+
+::: clinops.ingest.eicu.EicuCohortConfig
+
 ::: clinops.ingest.fhir.FHIRLoader
 
 ::: clinops.ingest.flat.FlatFileLoader

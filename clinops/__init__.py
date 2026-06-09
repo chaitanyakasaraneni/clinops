@@ -5,7 +5,8 @@ Bridging raw clinical data and production-ready machine learning pipelines.
 
 v0.1 modules
 ------------
-- clinops.ingest   : MIMIC-IV, FHIR R4, flat file loaders with schema validation
+- clinops.ingest   : MIMIC-IV, MIMIC-III, eICU-CRD, FHIR R4, and flat file loaders
+                     with schema validation
 - clinops.temporal : Time-series windowing, imputation, lag features, cohort alignment
 
 Coming in v0.2
@@ -20,7 +21,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("clinops")
 except PackageNotFoundError:
-    __version__ = "0.1.0-dev"
+    __version__ = "0.3.0-dev"
 
 __author__ = "Chaitanya Kasaraneni"
 __email__ = "kc.kasaraneni@gmail.com"

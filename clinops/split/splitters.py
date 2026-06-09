@@ -75,6 +75,166 @@ class SplitResult:
         return "\n".join(lines)
 
 
+@dataclass
+class TriSplitResult:
+    """
+    The result of a three-way (train/val/test) split.
+
+    The train/val/test analogue of :class:`SplitResult`, used by
+    :class:`GroupedPatientSplitter` for the JBHI-style 70/15/15 cohort split.
+
+    Attributes
+    ----------
+    train, val, test:
+        The three partition DataFrames.
+    metadata:
+        Dict with split statistics (group counts, row counts, seed, etc.).
+    """
+
+    train: pd.DataFrame
+    val: pd.DataFrame
+    test: pd.DataFrame
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def sizes(self) -> tuple[int, int, int]:
+        return len(self.train), len(self.val), len(self.test)
+
+    def summary(self) -> str:
+        """Return a human-readable summary of the split."""
+        total = sum(self.sizes) or 1
+        tr, va, te = self.sizes
+        lines = [
+            f"Train: {tr:,} rows ({tr / total:.1%})",
+            f"Val:   {va:,} rows ({va / total:.1%})",
+            f"Test:  {te:,} rows ({te / total:.1%})",
+        ]
+        for k, v in self.metadata.items():
+            lines.append(f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}")
+        return "\n".join(lines)
+
+
+class GroupedPatientSplitter:
+    """
+    Three-way patient-grouped split where the split unit is a *group* id.
+
+    Built for eICU, where the row/stay identifier (``patientunitstayid``)
+    differs from the patient identifier (``uniquepid``): one patient may have
+    several ICU stays. Splitting on the stay id alone would leak a patient
+    across folds. This splitter assigns whole groups (patients) to train, val,
+    or test, guaranteeing every stay for a patient lands in the same fold.
+
+    Parameters
+    ----------
+    group_col:
+        Patient-level group id (e.g. ``"uniquepid"``). All rows sharing a value
+        go to the same fold.
+    stay_col:
+        Optional stay-level id (e.g. ``"patientunitstayid"``), used only for
+        leakage-check reporting in ``metadata``.
+    val_size, test_size:
+        Fractions of *groups* assigned to validation and test. The remainder is
+        train. Must sum to < 1. Defaults 0.15 / 0.15.
+    random_state:
+        Seed for reproducible group assignment. Default 42.
+
+    Examples
+    --------
+    >>> splitter = GroupedPatientSplitter(
+    ...     group_col="uniquepid",
+    ...     stay_col="patientunitstayid",
+    ...     val_size=0.15,
+    ...     test_size=0.15,
+    ... )
+    >>> result = splitter.split(meta)
+    >>> # no patient appears in more than one fold
+    >>> g = "uniquepid"
+    >>> assert not (set(result.train[g]) & set(result.test[g]))
+    >>> assert not (set(result.train[g]) & set(result.val[g]))
+    >>> assert not (set(result.val[g]) & set(result.test[g]))
+    """
+
+    def __init__(
+        self,
+        group_col: str = "uniquepid",
+        stay_col: str | None = "patientunitstayid",
+        val_size: float = 0.15,
+        test_size: float = 0.15,
+        random_state: int = 42,
+    ) -> None:
+        if not 0 < val_size < 1 or not 0 < test_size < 1:
+            raise ValueError("val_size and test_size must each be in (0, 1)")
+        if val_size + test_size >= 1:
+            raise ValueError(f"val_size + test_size must be < 1, got {val_size + test_size}")
+        self.group_col = group_col
+        self.stay_col = stay_col
+        self.val_size = val_size
+        self.test_size = test_size
+        self.random_state = random_state
+
+    def split(self, df: pd.DataFrame) -> TriSplitResult:
+        """
+        Split ``df`` three ways at the group (patient) level.
+
+        Parameters
+        ----------
+        df:
+            Input DataFrame. Must contain ``group_col``.
+
+        Returns
+        -------
+        TriSplitResult
+        """
+        if self.group_col not in df.columns:
+            raise ValueError(f"group_col '{self.group_col}' not found in DataFrame")
+
+        rng = np.random.default_rng(self.random_state)
+        groups = df[self.group_col].unique()
+        n = len(groups)
+        shuffled = rng.permutation(groups)
+
+        n_test = max(1, round(n * self.test_size))
+        n_val = max(1, round(n * self.val_size))
+        if n_test + n_val >= n:  # tiny-cohort guard: leave at least one for train
+            n_val = max(1, min(n_val, n - 2))
+            n_test = max(1, min(n_test, n - n_val - 1))
+
+        test_groups = set(shuffled[:n_test])
+        val_groups = set(shuffled[n_test : n_test + n_val])
+        train_groups = set(shuffled[n_test + n_val :])
+
+        col = df[self.group_col]
+        train = df[col.isin(train_groups)].reset_index(drop=True)
+        val = df[col.isin(val_groups)].reset_index(drop=True)
+        test = df[col.isin(test_groups)].reset_index(drop=True)
+
+        # Leakage assertion — a programmatic guarantee, not just a log line.
+        overlap = (
+            (train_groups & val_groups) | (train_groups & test_groups) | (val_groups & test_groups)
+        )
+        if overlap:
+            raise RuntimeError(f"GroupedPatientSplitter: {len(overlap)} groups leaked across folds")
+
+        meta: dict[str, Any] = {
+            "group_col": self.group_col,
+            "n_train_groups": len(train_groups),
+            "n_val_groups": len(val_groups),
+            "n_test_groups": len(test_groups),
+            "train_rows": len(train),
+            "val_rows": len(val),
+            "test_rows": len(test),
+            "random_state": self.random_state,
+        }
+        if self.stay_col and self.stay_col in df.columns:
+            meta["n_stays"] = int(df[self.stay_col].nunique())
+
+        logger.info(
+            f"GroupedPatientSplitter: {n} groups → train={len(train_groups)} / "
+            f"val={len(val_groups)} / test={len(test_groups)} groups"
+        )
+        return TriSplitResult(train=train, val=val, test=test, metadata=meta)
+
+
 class TemporalSplitter:
     """
     Split clinical data on a datetime cutoff.
