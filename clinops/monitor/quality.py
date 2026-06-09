@@ -10,10 +10,12 @@ production-oriented checks that can be run at pipeline ingestion time.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

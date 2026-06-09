@@ -11,11 +11,13 @@ Requires: pip install clinops[fhir]
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 ResourceType = Literal["Patient", "Observation", "Condition", "MedicationRequest"]
 

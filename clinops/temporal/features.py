@@ -4,9 +4,12 @@ Lag feature construction and cohort alignment utilities.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 class LagFeatureBuilder:

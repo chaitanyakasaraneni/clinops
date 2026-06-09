@@ -15,15 +15,17 @@ Example
 from __future__ import annotations
 
 import contextlib
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from loguru import logger
 
 from clinops.ingest.schema import SchemaValidationError
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Table schemas — minimum required columns per MIMIC-IV table

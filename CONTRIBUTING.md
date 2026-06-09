@@ -24,7 +24,7 @@ pip install -e ".[dev]"
 - **Type hints** on all public functions and methods
 - **Docstrings** in NumPy style for all public APIs
 - **Tests** for all new features (aim for >80% coverage on new code)
-- **Logging** via `loguru` — no bare `print()` in library code
+- **Logging** via the stdlib `logging` module (`logger = logging.getLogger(__name__)`) — no bare `print()` in library code
 
 ## Adding a New Data Source
 

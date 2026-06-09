@@ -26,14 +26,16 @@ Working paper, Western Michigan University.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 import numpy as np
 import pandas as pd
-from loguru import logger
 from scipy import stats
+
+logger = logging.getLogger(__name__)
 
 
 class DriftSeverity(StrEnum):

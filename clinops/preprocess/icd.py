@@ -25,12 +25,14 @@ GEM coverage, users can load the official CMS file using
 
 from __future__ import annotations
 
+import logging
 import re
 from enum import StrEnum
 from pathlib import Path
 
 import pandas as pd
-from loguru import logger
+
+logger = logging.getLogger(__name__)
 
 
 class ICDVersion(StrEnum):

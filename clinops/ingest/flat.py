@@ -7,12 +7,14 @@ null representations, duplicate rows, and configurable schema validation.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
-from loguru import logger
 
 from clinops.ingest.schema import ClinicalSchema
+
+logger = logging.getLogger(__name__)
 
 _NULL_VALUES = ["", "NA", "N/A", "n/a", "nan", "NaN", "NULL", "null", "None", "UNKNOWN", "."]
 
