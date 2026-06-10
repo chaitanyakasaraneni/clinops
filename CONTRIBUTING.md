@@ -16,7 +16,7 @@ pip install -e ".[dev]"
 2. Write your code with type hints and docstrings
 3. Add tests in `tests/` covering your changes
 4. Run the test suite: `pytest tests/ -v`
-5. Run linting: `ruff check clinops/ && black clinops/ tests/`
+5. Run linting and formatting: `ruff check clinops/ && ruff format clinops/ tests/`
 6. Submit a pull request with a clear description
 
 ## Code Standards

@@ -62,7 +62,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from clinops.ingest.mappings.eicu_lab_map import canonical_lab_features, map_labname
 from clinops.ingest.schema import LeakageError, SchemaValidationError
@@ -343,9 +343,19 @@ class EicuLoader:
         usecols = None
         if columns is not None:
             wanted = {"patientunitstayid", "observationoffset", *columns}
-            # Resolve against header so we only request columns that exist.
-            header = pd.read_csv(path, nrows=0)
-            usecols = [c for c in header.columns if c in wanted]
+            # Resolve against the actual file schema so we only request columns
+            # that exist — and never hand a Parquet file to the CSV reader.
+            if path.suffix == ".parquet":
+                import pyarrow.parquet as pq
+
+                # pyarrow.parquet.read_schema lacks a return annotation, so
+                # mypy --strict flags the call; the result is a pyarrow Schema.
+                available: list[str] = list(
+                    pq.read_schema(path).names  # type: ignore[no-untyped-call]
+                )
+            else:
+                available = list(pd.read_csv(path, nrows=0).columns)
+            usecols = [c for c in available if c in wanted]
 
         logger.debug(
             "Loading eICU %s from %s (chunked, chunk_size=%d)",
@@ -548,9 +558,17 @@ class EicuCohortConfig(BaseModel):
         Length of the input window. Default 24.
     prediction_hours:
         Length of the forward label horizon. Default 6.
+    baseline_hours:
+        Window (from ICU admission) used to compute each patient's physiological
+        baseline (lowest creatinine, best GCS) for the renal and neurological
+        labels. Default 6. Kept separate from ``prediction_hours`` — they are
+        unrelated concepts that merely share a default.
     missingness_threshold:
         Stays whose critical-variable missingness on the hourly grid exceeds
         this fraction are excluded. Default 0.30.
+    dnr_window_hours:
+        Stays with a DNR / care-limitation order within this many hours of
+        admission are excluded. Default 6.
     first_stay_only:
         Keep only the first ICU stay per ``uniquepid``. Default ``True``.
     hospital_ids:
@@ -568,12 +586,39 @@ class EicuCohortConfig(BaseModel):
     max_icu_hours: int = 72
     observation_hours: int = 24
     prediction_hours: int = 6
+    baseline_hours: int = 6
     missingness_threshold: float = 0.30
     dnr_window_hours: int = 6
     first_stay_only: bool = True
     hospital_ids: list[int] | None = None
     limit_stays: int | None = None
     random_state: int = 42
+
+    @model_validator(mode="after")
+    def _check_consistency(self) -> EicuCohortConfig:
+        positive = {
+            "min_age": self.min_age,
+            "min_los_hours": self.min_los_hours,
+            "max_icu_hours": self.max_icu_hours,
+            "observation_hours": self.observation_hours,
+            "prediction_hours": self.prediction_hours,
+            "baseline_hours": self.baseline_hours,
+            "dnr_window_hours": self.dnr_window_hours,
+        }
+        for name, value in positive.items():
+            if value <= 0:
+                raise ValueError(f"{name} must be positive, got {value}")
+        if not 0.0 <= self.missingness_threshold <= 1.0:
+            raise ValueError(
+                f"missingness_threshold must be in [0, 1], got {self.missingness_threshold}"
+            )
+        if self.observation_hours + self.prediction_hours > self.max_icu_hours:
+            raise ValueError(
+                f"observation_hours + prediction_hours "
+                f"({self.observation_hours} + {self.prediction_hours}) must be "
+                f"<= max_icu_hours ({self.max_icu_hours}); otherwise no window fits."
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -712,6 +757,14 @@ class EicuTableLoader:
         except FileNotFoundError:
             logger.warning("carePlanGeneral not found; skipping DNR exclusion")
             return set()
+        required = {"cplitemvalue", "cplitemoffset", "patientunitstayid"}
+        if not required.issubset(cpg.columns):
+            logger.warning("carePlanGeneral missing expected columns; skipping DNR exclusion")
+            return set()
+        # Restrict to the care-limitation group so the same text appearing in an
+        # unrelated care-plan group cannot over-exclude stays (matches docstring).
+        if "cplgroup" in cpg.columns:
+            cpg = cpg[cpg["cplgroup"].astype(str).str.strip().str.lower() == "care limitation"]
         item = cpg["cplitemvalue"].astype(str).str.lower()
         is_dnr = item.str.contains("do not resuscitate", na=False) | item.str.contains(
             r"\bdnr\b|\bdnar\b", na=False, regex=True
@@ -734,14 +787,14 @@ class EicuTableLoader:
     # -- hourly assembly ----------------------------------------------------
 
     def _hour_grid(self, cohort: pd.DataFrame) -> pd.DataFrame:
-        """Dense (stay, hour) grid covering [0, min(LOS, max_icu_hours))."""
+        """Dense (stay, hour) grid covering [0, min(LOS, max_icu_hours)) per stay."""
         max_h = self._cfg.max_icu_hours
-        rows = []
-        for stay, los_h in zip(cohort["patientunitstayid"], cohort["los_hours"], strict=True):
-            n = int(min(max_h, np.floor(los_h)))
-            n = max(n, 1)
-            rows.append(pd.DataFrame({"patientunitstayid": stay, "hour": np.arange(n, dtype=int)}))
-        return pd.concat(rows, ignore_index=True)
+        # Vectorised: avoids building one DataFrame per stay (slow at 60k+ stays).
+        los = cohort["los_hours"].to_numpy()
+        n_hours = np.clip(np.floor(los), 1, max_h).astype(int)
+        stays = np.repeat(cohort["patientunitstayid"].to_numpy(), n_hours)
+        hours = np.concatenate([np.arange(n, dtype=int) for n in n_hours])
+        return pd.DataFrame({"patientunitstayid": stays, "hour": hours})
 
     def _hourly_vitals(self, stay_ids: list[int]) -> pd.DataFrame:
         """Mean-aggregate vitalPeriodic to hourly bins, with NIBP MAP fallback."""
@@ -795,8 +848,9 @@ class EicuTableLoader:
     def _hourly_labs(self, stay_ids: list[int]) -> pd.DataFrame:
         """Pivot long-format labs to a wide hourly table using the lab map."""
         # Read every lab row for the cohort; map names, warn on unmapped.
+        # load_lab returns a freshly-built frame owned by this method, so it is
+        # safe to mutate in place without an extra copy.
         lab = self._loader.load_lab(patient_unit_stay_ids=stay_ids)
-        lab = lab.copy()
         lab["feature"] = lab["labname"].map(map_labname)
 
         unmapped = sorted(
@@ -1035,9 +1089,9 @@ class EicuTableLoader:
         ``creatinine``, ``gcs_total``, ``pao2`` and ``fio2`` are guaranteed to
         exist by :meth:`_build_hourly` (as NaN columns if never observed).
         """
-        # Per-stay baselines from the first ``prediction_hours`` of the stay:
+        # Per-stay baselines from the first ``baseline_hours`` of the stay:
         # lowest creatinine and best (max) GCS.
-        early = df[df["hour"] < self._cfg.prediction_hours]
+        early = df[df["hour"] < self._cfg.baseline_hours]
         base_cr = (
             early.groupby("patientunitstayid")["creatinine"].min().rename("baseline_creatinine")
         )
@@ -1144,11 +1198,33 @@ class EicuTableLoader:
             ``X`` has shape ``(n_windows, observation_hours, 22)``;
             ``y`` has shape ``(n_windows, 5)`` (one binary label per organ).
         """
-        obs = observation_hours or self._cfg.observation_hours
-        pred = prediction_hours or self._cfg.prediction_hours
-        if max_icu_hours is not None:
-            self._cfg.max_icu_hours = max_icu_hours
-            self._cohort = None  # invalidate cached cohort/grid
+        # Apply per-call overrides for the duration of the build, then restore —
+        # so a one-off call never silently mutates the loader's state, and the
+        # overrides reach every consumer consistently (the grid via
+        # max_icu_hours, the windowing via observation/prediction_hours, and the
+        # baselines via baseline_hours, all read from self._cfg). Overrides are
+        # routed through a fresh EicuCohortConfig so they are validated the same
+        # way as the constructor (positive values; observation + prediction <=
+        # max_icu_hours) rather than silently producing empty/invalid windows.
+        overrides = {
+            "observation_hours": observation_hours,
+            "prediction_hours": prediction_hours,
+            "max_icu_hours": max_icu_hours,
+        }
+        overrides = {k: v for k, v in overrides.items() if v is not None}
+        if not overrides:
+            return self._build_sequences_impl()
+
+        saved_cfg = self._cfg
+        self._cfg = EicuCohortConfig(**{**saved_cfg.model_dump(), **overrides})
+        try:
+            return self._build_sequences_impl()
+        finally:
+            self._cfg = saved_cfg
+
+    def _build_sequences_impl(self) -> tuple[np.ndarray, np.ndarray]:
+        obs = self._cfg.observation_hours
+        pred = self._cfg.prediction_hours
 
         hourly = self._build_hourly()
         hourly = self._drop_high_missingness(hourly)
