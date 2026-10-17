@@ -287,7 +287,9 @@ class MimicLoader:
     def _parse_datetimes(self, table_name: str, df: pd.DataFrame) -> pd.DataFrame:
         time_cols = [c for c in df.columns if "time" in c or c == "dod"]
         for col in time_cols:
-            if col in df.columns and df[col].dtype == object:
+            # is_string_dtype covers both object (pandas 2) and the default
+            # "str" dtype that pandas 3 infers for text columns read from CSV.
+            if col in df.columns and pd.api.types.is_string_dtype(df[col].dtype):
                 with contextlib.suppress(Exception):
                     df[col] = pd.to_datetime(df[col], errors="coerce")
         return df

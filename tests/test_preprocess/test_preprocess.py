@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -198,6 +200,36 @@ class TestUnitNormalizer:
         # mg/dL rows should be unchanged
         assert result.loc[0, "glucose"] == 126.0
         assert result.loc[2, "glucose"] == 180.0
+
+    def test_unit_column_integer_values(self):
+        # Integer readings are common in CSV extracts; conversion must not fail or warn.
+        df = pd.DataFrame({"glucose": [126, 6], "glucose_unit": ["mg/dL", "mmol/L"]})
+        normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            result = normalizer.transform(df)
+        assert result.loc[0, "glucose"] == 126.0
+        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018, rel=0.01)
+        assert (result["glucose_unit"] == "mg/dL").all()
+
+    def test_unit_column_nullable_integer_values(self):
+        df = pd.DataFrame(
+            {
+                "glucose": pd.array([126, 6, None], dtype="Int64"),
+                "glucose_unit": ["mg/dL", "mmol/L", "mg/dL"],
+            }
+        )
+        normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
+        result = normalizer.transform(df)
+        assert result["glucose"].dtype == "Float64"
+        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018, rel=0.01)
+        assert pd.isna(result.loc[2, "glucose"])
+
+    def test_unit_column_integer_dtype_kept_when_nothing_converted(self):
+        df = pd.DataFrame({"glucose": [126, 99], "glucose_unit": ["mg/dL", "mg/dL"]})
+        normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
+        result = normalizer.transform(df)
+        assert result["glucose"].dtype == "int64"
 
     def test_unit_column_updates_unit_col_after_conversion(self, glucose_df):
         normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})

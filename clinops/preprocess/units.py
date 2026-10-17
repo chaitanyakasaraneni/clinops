@@ -226,7 +226,12 @@ class UnitNormalizer:
                 spec = UNIT_CONVERSIONS[key]
                 mask = df[unit_col] == from_unit
                 n = int(mask.sum())
-                df.loc[mask, value_col] = spec.convert(df.loc[mask, value_col])
+                converted = spec.convert(df.loc[mask, value_col])
+                # Converted values are fractional; pandas 3 refuses to write them into
+                # an integer column through .loc (pandas 2 upcast with a FutureWarning).
+                if pd.api.types.is_integer_dtype(df[value_col].dtype):
+                    df[value_col] = df[value_col].astype(converted.dtype)
+                df.loc[mask, value_col] = converted
                 df.loc[mask, unit_col] = target_unit
 
                 self._converted.append(
