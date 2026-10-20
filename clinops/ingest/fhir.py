@@ -71,13 +71,16 @@ class FHIRLoader:
         Parameters
         ----------
         category:
-            Filter to a FHIR observation category (e.g. "vital-signs", "laboratory").
+            Keep only Observations with this category code (e.g. "vital-signs",
+            "laboratory"), matched against ``Observation.category[].coding[].code``.
         loinc_codes:
             Filter to specific LOINC codes.
         """
         records = self._load_resources("Observation")
         rows = []
         for r in records:
+            if category is not None and category not in _category_codes(r):
+                continue
             code_obj = r.get("code", {})
             codings = code_obj.get("coding", [])
             loinc = next(
@@ -96,7 +99,7 @@ class FHIRLoader:
                     "status": r.get("status"),
                 }
             )
-        df = pd.DataFrame(rows)
+        df = pd.DataFrame(rows, columns=_OBSERVATION_COLUMNS)
         if loinc_codes:
             df = df[df["loinc_code"].isin(loinc_codes)]
         return df
@@ -170,3 +173,25 @@ class FHIRLoader:
                 except json.JSONDecodeError:
                     logger.warning(f"Skipping malformed NDJSON line in {path}")
         return records
+
+
+_OBSERVATION_COLUMNS = [
+    "observation_id",
+    "patient_id",
+    "loinc_code",
+    "display",
+    "value",
+    "unit",
+    "effective_time",
+    "status",
+]
+
+
+def _category_codes(resource: dict[str, Any]) -> set[str]:
+    """Return every category code on a FHIR resource."""
+    return {
+        coding["code"]
+        for concept in resource.get("category", [])
+        for coding in concept.get("coding", [])
+        if "code" in coding
+    }

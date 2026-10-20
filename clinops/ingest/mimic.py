@@ -16,16 +16,18 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 from clinops.ingest.schema import SchemaValidationError
 
 logger = logging.getLogger(__name__)
+
+# Tables large enough that chunk_size applies.
+_CHUNKED_TABLES = frozenset({"chartevents", "labevents"})
 
 # ---------------------------------------------------------------------------
 # Table schemas — minimum required columns per MIMIC-IV table
@@ -95,8 +97,11 @@ class MimicLoader:
         If True (default), raise ``SchemaValidationError`` when required
         columns are missing. If False, log a warning and continue.
     chunk_size:
-        If set, return a ``pd.io.parsers.TextFileReader`` for large tables
-        instead of loading the full table into memory.
+        If set, ``chartevents`` and ``labevents`` CSV files are read in chunks
+        of this many rows, and the requested filters are applied to each chunk
+        before the next is read. Only matching rows are kept in memory, so
+        pass ``subject_ids``, ``item_ids`` or a time range to benefit.
+        Parquet files are always read in full.
 
     Examples
     --------
@@ -154,8 +159,12 @@ class MimicLoader:
         end_time:
             ISO datetime string — exclude rows after this time.
         """
-        df = self._load_table("chartevents")
-        return self._filter(df, subject_ids, hadm_ids, stay_ids, item_ids, start_time, end_time)
+        return self._load_table(
+            "chartevents",
+            lambda df: self._filter(
+                df, subject_ids, hadm_ids, stay_ids, item_ids, start_time, end_time
+            ),
+        )
 
     def labevents(
         self,
@@ -166,8 +175,12 @@ class MimicLoader:
         end_time: str | None = None,
     ) -> pd.DataFrame:
         """Load hospital laboratory results."""
-        df = self._load_table("labevents")
-        return self._filter(df, subject_ids, hadm_ids, None, item_ids, start_time, end_time)
+        return self._load_table(
+            "labevents",
+            lambda df: self._filter(
+                df, subject_ids, hadm_ids, None, item_ids, start_time, end_time
+            ),
+        )
 
     def admissions(
         self,
@@ -252,25 +265,44 @@ class MimicLoader:
             f"Expected one of: {stem}.csv.gz, {stem}.csv, {stem}.parquet"
         )
 
-    def _load_table(self, table_name: str) -> pd.DataFrame:
+    def _load_table(
+        self,
+        table_name: str,
+        row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    ) -> pd.DataFrame:
+        """
+        Load a table, validate its schema, parse datetimes, and apply ``row_filter``.
+
+        With ``chunk_size`` set, large CSV tables are read chunk by chunk and
+        ``row_filter`` is applied to each chunk, so only matching rows are kept.
+        """
         path = self._resolve_table_path(table_name)
         logger.debug(f"Loading {table_name} from {path}")
 
-        read_kwargs: dict[str, Any] = {}
-        if self._cfg.chunk_size:
-            read_kwargs["chunksize"] = self._cfg.chunk_size
-
-        if path.suffix == ".parquet":
-            df = pd.read_parquet(path)
+        chunk_size = self._cfg.chunk_size
+        if chunk_size and path.suffix != ".parquet" and table_name in _CHUNKED_TABLES:
+            parts = []
+            with pd.read_csv(path, low_memory=False, chunksize=chunk_size) as reader:
+                for i, chunk in enumerate(reader):
+                    if i == 0:
+                        self._validate_schema(table_name, chunk)
+                    chunk = self._parse_datetimes(table_name, chunk)
+                    parts.append(row_filter(chunk) if row_filter else chunk)
+            if parts:
+                df = pd.concat(parts, ignore_index=True)
+            else:
+                # Header-only file: no chunks are yielded.
+                df = pd.read_csv(path, nrows=0)
+                self._validate_schema(table_name, df)
         else:
-            df = pd.read_csv(path, low_memory=False, **read_kwargs)
-
-        if isinstance(df, pd.DataFrame) and (
-            path.suffix == ".parquet"
-            or not (self._cfg.chunk_size and table_name in {"chartevents", "labevents"})
-        ):
+            if path.suffix == ".parquet":
+                df = pd.read_parquet(path)
+            else:
+                df = pd.read_csv(path, low_memory=False)
             self._validate_schema(table_name, df)
             df = self._parse_datetimes(table_name, df)
+            if row_filter:
+                df = row_filter(df)
 
         logger.debug(f"Loaded {table_name}: {len(df):,} rows, {len(df.columns)} cols")
         return df

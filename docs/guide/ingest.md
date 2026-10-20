@@ -67,11 +67,12 @@ labs   = loader.labevents(subject_ids=[10000032, 10000980])
 stays  = loader.icustays(subject_ids=[10000032, 10000980])
 ```
 
-Large tables (`chartevents`, `labevents`) are loaded in chunks when `chunk_size` is set to avoid memory issues:
+Large CSV tables (`chartevents`, `labevents`) are read in chunks when `chunk_size` is set. Your filters are applied to each chunk as it is read, so only matching rows are kept in memory. Chunking only saves memory when you filter; loading a whole table still holds the whole table in memory.
 
 ```python
 loader = MimicLoader("/data/mimic-iv-2.2", chunk_size=100_000)
-charts = loader.chartevents()   # streams in 100k-row chunks internally
+# Reads 100k rows at a time and keeps only these patients' heart rate rows
+charts = loader.chartevents(subject_ids=[10000032, 10000980], item_ids=[220045])
 ```
 
 ---

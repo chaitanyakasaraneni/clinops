@@ -12,6 +12,7 @@ import pytest
 
 from clinops.ingest.mimic import MimicLoader
 from clinops.ingest.mimic_tables import MimicTableLoader
+from clinops.ingest.schema import SchemaValidationError
 
 # ---------------------------------------------------------------------------
 # Fixtures — minimal CSV files that satisfy each schema
@@ -296,3 +297,52 @@ class TestSummary:
         missing = result[result["rows_sampled"] == 0]
         assert len(missing) >= 1
         assert missing["null_rate_pct"].isna().all()
+
+
+# ---------------------------------------------------------------------------
+# chunk_size (clinops#16)
+# ---------------------------------------------------------------------------
+
+
+class TestChunkedLoading:
+    """Chunked reads must return the same rows as a full read, filters included."""
+
+    @pytest.mark.parametrize("chunk_size", [1, 2, 1000])
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"subject_ids": [1]},
+            {"item_ids": [220045]},
+            {"start_time": "2150-01-01 10:00:00", "end_time": "2150-01-02 00:00:00"},
+        ],
+    )
+    def test_chartevents_matches_unchunked(self, mimic_dir, chunk_size, kwargs):
+        expected = MimicLoader(mimic_dir).chartevents(**kwargs)
+        result = MimicLoader(mimic_dir, chunk_size=chunk_size).chartevents(**kwargs)
+        pd.testing.assert_frame_equal(result, expected)
+
+    @pytest.mark.parametrize("chunk_size", [1, 1000])
+    def test_labevents_matches_unchunked(self, mimic_dir, chunk_size):
+        expected = MimicLoader(mimic_dir).labevents(subject_ids=[1])
+        result = MimicLoader(mimic_dir, chunk_size=chunk_size).labevents(subject_ids=[1])
+        pd.testing.assert_frame_equal(result, expected)
+
+    def test_table_loader_passes_chunk_size_through(self, mimic_dir):
+        expected = MimicTableLoader(mimic_dir).chartevents(subject_ids=[1])
+        result = MimicTableLoader(mimic_dir, chunk_size=1).chartevents(subject_ids=[1])
+        pd.testing.assert_frame_equal(result, expected)
+        assert pd.api.types.is_datetime64_any_dtype(result["charttime"])
+
+    def test_header_only_file(self, mimic_dir):
+        path = mimic_dir / "icu" / "chartevents.csv"
+        path.write_text(path.read_text().splitlines()[0] + "\n")
+        result = MimicLoader(mimic_dir, chunk_size=2).chartevents()
+        assert result.empty
+        assert "charttime" in result.columns
+
+    def test_schema_still_validated(self, mimic_dir):
+        path = mimic_dir / "icu" / "chartevents.csv"
+        path.write_text("subject_id,valuenum\n1,72.0\n")
+        with pytest.raises(SchemaValidationError):
+            MimicLoader(mimic_dir, chunk_size=1).chartevents()
