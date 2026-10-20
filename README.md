@@ -31,7 +31,7 @@ multi-cloud environments.
 
 ---
 
-## v0.1 Modules
+## Modules
 
 | Module | What it does |
 |---|---|
@@ -39,9 +39,10 @@ multi-cloud environments.
 | `clinops.temporal` | Sliding/tumbling windows, gap-aware imputation, lag features, cohort alignment |
 | `clinops.preprocess` | Outlier clipping with physiological bounds, unit normalization (mg/dL ↔ mmol/L etc.), ICD-9→10 mapping |
 | `clinops.split` | Temporal, patient-level, and stratified patient train/test splitting |
+| `clinops.monitor` | Distribution drift detection (PSI, KS) and data quality checks (null rates, schema and dtype drift, row count anomalies) |
+| `clinops.orchestrate` | Pipeline artifact storage on GCS/S3 and AWS Step Functions pipeline definition and execution (optional `gcp`/`aws` extras) |
 
-**Roadmap:** `clinops.monitor` (drift detection, data quality) and `clinops.orchestrate`
-(GCS/S3, Step Functions) are planned for v0.2.
+See the [user guide](https://clinops.readthedocs.io/) for full walkthroughs of `clinops.monitor` and `clinops.orchestrate`.
 
 ---
 
@@ -391,7 +392,8 @@ Requires Python **3.12+**.
 ```bash
 pip install clinops           # core
 pip install clinops[fhir]     # adds FHIR R4 loader
-pip install clinops[gcp]      # adds GCP extras (for v0.2)
+pip install clinops[gcp]      # adds GCS storage for clinops.orchestrate
+pip install clinops[aws]      # adds S3 storage and Step Functions for clinops.orchestrate
 pip install -e ".[dev]"       # development
 ```
 
@@ -436,7 +438,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pytest tests/ -v` and
   title   = {clinops: Clinical ML Pipeline Toolkit},
   year    = {2026},
   url     = {https://github.com/chaitanyakasaraneni/clinops},
-  version = {0.1.7}
+  version = {0.5.0}
 }
 ```
 

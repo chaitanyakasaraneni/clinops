@@ -107,7 +107,7 @@ class Imputer:
 
     def fit(self, df: pd.DataFrame) -> Imputer:
         """Compute imputation statistics from a reference DataFrame (training set)."""
-        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if self.strategy == ImputationStrategy.MEAN:
             if self.per_patient and self.id_col:
                 # store per-patient means — used in transform
