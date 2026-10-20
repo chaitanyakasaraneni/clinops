@@ -46,6 +46,76 @@ See the [user guide](https://clinops.readthedocs.io/) for full walkthroughs of `
 
 ---
 
+## How clinops relates to other tools
+
+clinops is a data preparation library: it turns raw clinical tables into clean,
+leakage-safe DataFrames. It does not train models, and it is meant to be used
+alongside modelling libraries rather than instead of them.
+
+| | clinops | PyHealth | scikit-learn |
+|---|---|---|---|
+| Main purpose | Clinical data preparation on pandas DataFrames | End-to-end deep learning for healthcare (PyTorch) | General-purpose ML |
+| Dataset loaders | MIMIC-III, MIMIC-IV, eICU-CRD, FHIR R4, flat CSV/Parquet | MIMIC-III, MIMIC-IV, eICU, OMOP, FHIR, and more | None |
+| Patient-level splits | `PatientSplitter`, `StratifiedPatientSplitter`, `GroupedPatientSplitter` | `split_by_patient` | `GroupShuffleSplit`, `GroupKFold`, `StratifiedGroupKFold` |
+| Timestamp cutoff split | `TemporalSplitter` | No | No (`TimeSeriesSplit` splits by row position) |
+| Physiological range clipping | `ClinicalOutlierClipper` | No | No |
+| Lab unit normalization | `UnitNormalizer` (30 conversions) | No | No |
+| ICD-9 to ICD-10 mapping | `ICDMapper` | `medcode.CrossMap` | No |
+| Drift and data quality monitoring | `clinops.monitor` | No | No |
+| Models and training | No | Yes | Yes |
+
+**When to choose which:**
+
+- **PyHealth** is the better fit if you want a full deep learning pipeline:
+  predefined clinical tasks, PyTorch models, and a trainer. It overlaps with
+  clinops on dataset loading, patient-level splitting, and ICD code mapping.
+  Use clinops when you need a pandas-native preparation step that PyHealth does
+  not cover (unit normalization, physiological clipping, timestamp cutoff splits,
+  drift monitoring), or when you are training classical models and do not want a
+  PyTorch dependency.
+- **scikit-learn's group splitters** already keep each patient's records
+  together, and `StratifiedGroupKFold` also balances the outcome. For k-fold
+  cross-validation, use them directly. clinops splitters produce a single
+  train/test (or train/val/test) split as DataFrames with a summary of sizes
+  and outcome rates, and add the timestamp cutoff split that scikit-learn lacks.
+
+**Using clinops with scikit-learn:** clinops handles the clinical cleaning and
+windowing, and scikit-learn handles patient-grouped cross-validation and the model.
+
+```python
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import StratifiedGroupKFold, cross_val_score
+from sklearn.pipeline import make_pipeline
+
+from clinops.preprocess import ClinicalOutlierClipper, UnitNormalizer
+from clinops.temporal import TemporalWindower
+
+# 1. clinops: clinical cleaning that generic tools don't know about
+df = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"}).transform(df)
+df = ClinicalOutlierClipper(action="null").fit_transform(df)
+
+# 2. clinops: per-patient time windows -> one feature row per window
+windows = TemporalWindower(window_hours=24, step_hours=6).fit_transform(
+    df, id_col="subject_id", time_col="charttime", feature_cols=["heart_rate", "glucose"]
+)
+windows["label"] = windows["subject_id"].map(outcomes)
+
+# 3. scikit-learn: patient-grouped, outcome-stratified cross-validation.
+#    Imputation sits inside the pipeline so it is fit on each training fold only.
+model = make_pipeline(SimpleImputer(strategy="median"), RandomForestClassifier(random_state=0))
+cv = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=0)
+scores = cross_val_score(
+    model, windows[["heart_rate", "glucose"]], windows["label"],
+    groups=windows["subject_id"], cv=cv, scoring="roc_auc",
+)
+```
+
+Comparison based on PyHealth and scikit-learn 1.8 as of October 2026. If
+something here is out of date, please open an issue.
+
+---
+
 ## Quickstart
 
 ```bash
