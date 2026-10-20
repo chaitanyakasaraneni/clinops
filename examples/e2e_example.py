@@ -1,8 +1,8 @@
 """
-clinops v0.1 — End-to-End Example
-==================================
+clinops — End-to-End Example
+============================
 
-Demonstrates the full v0.1 pipeline:
+Demonstrates the core pipeline:
   ingest → preprocess → temporal windowing → lag features → cohort alignment → split
 
 Uses synthetic ICU data — no MIMIC-IV access required.
@@ -29,7 +29,7 @@ from clinops.temporal import (
 )
 
 print("=" * 60)
-print("clinops v0.1 — End-to-End Example")
+print("clinops — End-to-End Example")
 print("=" * 60)
 
 # ── Synthetic MIMIC-IV-style data ───────────────────────────────────────────
@@ -359,7 +359,7 @@ print(s_result.summary())
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
-print("✅  v0.1 pipeline complete")
+print("✅  Pipeline complete")
 print("=" * 60)
 print(f"  Raw events:           {len(chartevents):,} rows")
 print(f"  Clipped events:       {len(clipped):,} rows")
@@ -375,4 +375,6 @@ print()
 print("Next steps:")
 print("  • MimicTableLoader('/data/mimic-iv-2.2') — swap in real MIMIC-IV data")
 print("  • clinops.ingest.FHIRLoader              — load FHIR R4 observations")
-print("  • clinops v0.2                           — drift detection + GCS/S3 orchestration")
+print("  • clinops.ingest.EicuTableLoader         — multi-centre eICU-CRD validation")
+print("  • clinops.monitor                        — drift detection + data quality checks")
+print("  • clinops.orchestrate                    — GCS/S3 storage + Step Functions")
