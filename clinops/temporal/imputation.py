@@ -77,17 +77,21 @@ class Imputer:
     strategy:
         Imputation strategy to apply.
     max_gap_hours:
-        For FORWARD_FILL and BACKWARD_FILL: maximum gap (in hours) to
-        fill across. Gaps larger than this are left as NaN to avoid
-        propagating stale values across long time periods. Requires a
-        ``time_col`` to be set.
+        For FORWARD_FILL and BACKWARD_FILL: fill a missing value only if
+        the observation it is filled from is at most this many hours away,
+        measured per column from the last (or next) actual observation.
+        Requires ``time_col``.
     time_col:
         Name of the datetime column (used with max_gap_hours).
     per_patient:
-        If True and strategy is MEAN/MEDIAN, compute statistics per
-        patient group rather than globally.
+        If True and strategy is MEAN/MEDIAN, ``fit`` learns per-patient
+        statistics. ``transform`` fills each patient from their own fitted
+        statistic, falling back to the global fitted statistic for patients
+        not seen in ``fit``. Requires ``id_col``.
     id_col:
-        Patient identifier column (required when per_patient=True).
+        Patient identifier column. FORWARD_FILL, BACKWARD_FILL, and LINEAR
+        are applied within each patient when set. Without it, the whole
+        DataFrame is treated as one series, so set it on multi-patient data.
     """
 
     def __init__(
@@ -98,27 +102,29 @@ class Imputer:
         per_patient: bool = False,
         id_col: str | None = None,
     ) -> None:
+        if max_gap_hours is not None and not time_col:
+            raise ValueError("max_gap_hours requires time_col to be set")
+        if per_patient and not id_col:
+            raise ValueError("per_patient=True requires id_col to be set")
         self.strategy = strategy
         self.max_gap_hours = max_gap_hours
         self.time_col = time_col
         self.per_patient = per_patient
         self.id_col = id_col
+        self._fitted = False
         self._fill_values: dict[str, float] = {}
+        self._patient_stats: pd.DataFrame | None = None
 
     def fit(self, df: pd.DataFrame) -> Imputer:
         """Compute imputation statistics from a reference DataFrame (training set)."""
-        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        if self.strategy == ImputationStrategy.MEAN:
-            if self.per_patient and self.id_col:
-                # store per-patient means — used in transform
-                self._patient_means = df.groupby(self.id_col)[numeric_cols].mean()
+        if self.strategy in (ImputationStrategy.MEAN, ImputationStrategy.MEDIAN):
+            self._fill_values, self._patient_stats = self._compute_stats(df)
+            # Kept for backwards compatibility with code that inspects these attributes.
+            if self.strategy == ImputationStrategy.MEAN:
+                self._patient_means = self._patient_stats
             else:
-                self._fill_values = {str(k): float(v) for k, v in df[numeric_cols].mean().items()}
-        elif self.strategy == ImputationStrategy.MEDIAN:
-            if self.per_patient and self.id_col:
-                self._patient_medians = df.groupby(self.id_col)[numeric_cols].median()
-            else:
-                self._fill_values = {str(k): float(v) for k, v in df[numeric_cols].median().items()}
+                self._patient_medians = self._patient_stats
+            self._fitted = True
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -127,6 +133,7 @@ class Imputer:
         numeric_cols = [
             c for c in df.select_dtypes(include=[np.number]).columns if c != self.id_col
         ]
+        has_id = bool(self.id_col) and self.id_col in df.columns
 
         if self.strategy == ImputationStrategy.NONE:
             return df
@@ -134,58 +141,59 @@ class Imputer:
         elif self.strategy == ImputationStrategy.ZERO:
             df[numeric_cols] = df[numeric_cols].fillna(0.0)
 
-        elif self.strategy == ImputationStrategy.FORWARD_FILL:
-            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
+        elif self.strategy in (ImputationStrategy.FORWARD_FILL, ImputationStrategy.BACKWARD_FILL):
+            forward = self.strategy == ImputationStrategy.FORWARD_FILL
+            if self.max_gap_hours is not None:
+                assert self.time_col is not None  # enforced in __init__
+                if self.time_col not in df.columns:
+                    raise ValueError(
+                        f"time_col {self.time_col!r} not found; it is required for max_gap_hours"
+                    )
                 # Use a UUID-based sentinel to avoid clobbering any user column
                 # and to guarantee uniqueness. try/finally ensures the column is
                 # always removed, even if an exception is raised mid-transform.
                 _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
                 try:
                     df[_sentinel] = np.arange(len(df))
-                    df = self._fill_with_gap_mask(df, numeric_cols, self.time_col, forward=True)
+                    df = self._fill_with_gap_mask(df, numeric_cols, self.time_col, forward)
                     df = df.sort_values(_sentinel).reset_index(drop=True)
                 finally:
                     df = df.drop(columns=[_sentinel], errors="ignore")
+            elif has_id:
+                grouped = df.groupby(self.id_col, sort=False, dropna=False)[numeric_cols]
+                df[numeric_cols] = grouped.ffill() if forward else grouped.bfill()
             else:
-                if self.id_col and self.id_col in df.columns:
-                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].ffill()
-                else:
-                    df[numeric_cols] = df[numeric_cols].ffill()
-
-        elif self.strategy == ImputationStrategy.BACKWARD_FILL:
-            if self.max_gap_hours is not None and self.time_col and self.time_col in df.columns:
-                # Use a UUID-based sentinel to avoid clobbering any user column
-                # and to guarantee uniqueness. try/finally ensures the column is
-                # always removed, even if an exception is raised mid-transform.
-                _sentinel = f"__clinops_pos_{uuid.uuid4().hex}__"
-                try:
-                    df[_sentinel] = np.arange(len(df))
-                    df = self._fill_with_gap_mask(df, numeric_cols, self.time_col, forward=False)
-                    df = df.sort_values(_sentinel).reset_index(drop=True)
-                finally:
-                    df = df.drop(columns=[_sentinel], errors="ignore")
-            else:
-                if self.id_col and self.id_col in df.columns:
-                    df[numeric_cols] = df.groupby(self.id_col)[numeric_cols].bfill()
-                else:
-                    df[numeric_cols] = df[numeric_cols].bfill()
+                df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
 
         elif self.strategy == ImputationStrategy.LINEAR:
-            df[numeric_cols] = df[numeric_cols].interpolate(method="linear", limit_direction="both")
-
-        elif self.strategy == ImputationStrategy.MEAN:
-            if self._fill_values:
-                df[numeric_cols] = df[numeric_cols].fillna(self._fill_values)
+            if has_id:
+                # Interpolate within each entity so no value is drawn from a neighbouring patient.
+                df[numeric_cols] = df.groupby(self.id_col, sort=False, dropna=False)[
+                    numeric_cols
+                ].transform(lambda s: s.interpolate(method="linear", limit_direction="both"))
             else:
-                logger.warning("Imputer not fitted — using column means from current df")
-                df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].mean())
+                df[numeric_cols] = df[numeric_cols].interpolate(
+                    method="linear", limit_direction="both"
+                )
 
-        elif self.strategy == ImputationStrategy.MEDIAN:
-            if self._fill_values:
-                df[numeric_cols] = df[numeric_cols].fillna(self._fill_values)
+        elif self.strategy in (ImputationStrategy.MEAN, ImputationStrategy.MEDIAN):
+            if self._fitted:
+                fill_values, patient_stats = self._fill_values, self._patient_stats
             else:
-                logger.warning("Imputer not fitted — using column medians from current df")
-                df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+                logger.warning(
+                    f"Imputer not fitted; using column {self.strategy.value}s from the current "
+                    "df. Call fit() on training data to avoid leakage."
+                )
+                fill_values, patient_stats = self._compute_stats(df)
+            for col in numeric_cols:
+                series = df[col]
+                if patient_stats is not None and has_id and col in patient_stats.columns:
+                    series = series.fillna(df[self.id_col].map(patient_stats[col]))
+                # Patients unseen at fit time (e.g. a held-out test set) fall back to the
+                # global statistic from the fitted data.
+                if col in fill_values:
+                    series = series.fillna(fill_values[col])
+                df[col] = series
 
         elif self.strategy == ImputationStrategy.INDICATOR:
             for col in numeric_cols:
@@ -202,61 +210,50 @@ class Imputer:
     # Internal
     # ------------------------------------------------------------------
 
+    def _compute_stats(self, df: pd.DataFrame) -> tuple[dict[str, float], pd.DataFrame | None]:
+        """Return global per-column statistics and, if per_patient, per-entity statistics."""
+        numeric_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns if c != self.id_col
+        ]
+        stat = "mean" if self.strategy == ImputationStrategy.MEAN else "median"
+        global_stats = df[numeric_cols].agg(stat)
+        fill_values = {str(k): float(v) for k, v in global_stats.items() if pd.notna(v)}
+        patient_stats = None
+        if self.per_patient and self.id_col and self.id_col in df.columns:
+            patient_stats = df.groupby(self.id_col)[numeric_cols].agg(stat)
+        return fill_values, patient_stats
+
     def _fill_with_gap_mask(
         self, df: pd.DataFrame, numeric_cols: list[str], time_col: str, forward: bool
     ) -> pd.DataFrame:
         """
-        Apply ffill/bfill with gap masking.
+        Apply ffill/bfill, filling a missing value only if the observation it
+        is filled from is at most ``max_gap_hours`` away in time.
 
-        When ``id_col`` is set the fill and masking are applied within each
-        entity group, preventing values from propagating across entity
-        boundaries (e.g. across patients or admissions).
+        The distance is measured from the last (or next) actual observation of
+        that column, not from the neighbouring row, so dense rows from other
+        features cannot extend a stale value. When ``id_col`` is set, fill and
+        masking are applied within each entity group.
         """
-        if self.id_col and self.id_col in df.columns:
-            parts = []
-            for _, grp in df.groupby(self.id_col, sort=False):
-                grp = grp.sort_values(time_col)
-                original_nulls = grp[numeric_cols].isna()
-                grp[numeric_cols] = (
-                    grp[numeric_cols].ffill() if forward else grp[numeric_cols].bfill()
-                )
-                grp = self._mask_large_gaps(
-                    grp, numeric_cols, forward=forward, original_nulls=original_nulls
-                )
-                parts.append(grp)
-            return pd.concat(parts)
-        else:
-            df = df.sort_values(time_col)
-            original_nulls = df[numeric_cols].isna()
-            df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
-            return self._mask_large_gaps(
-                df, numeric_cols, forward=forward, original_nulls=original_nulls
-            )
-
-    def _mask_large_gaps(
-        self,
-        df: pd.DataFrame,
-        numeric_cols: list[str],
-        forward: bool,
-        original_nulls: pd.DataFrame | None = None,
-    ) -> pd.DataFrame:
-        """
-        Re-introduce NaN where the gap between actual observations exceeds
-        max_gap_hours, preventing stale carry-forward over long intervals.
-        """
-        if self.time_col not in df.columns:
-            return df
         assert self.max_gap_hours is not None
-        time = pd.to_datetime(df[self.time_col])
-        gap_hours = time.diff().dt.total_seconds() / 3600
+        id_col = self.id_col if self.id_col and self.id_col in df.columns else None
+        sort_cols = [id_col, time_col] if id_col is not None else [time_col]
+        df = df.sort_values(sort_cols, kind="stable")
+        time = pd.to_datetime(df[time_col])
+        limit = pd.Timedelta(hours=self.max_gap_hours)
+        keys = df[id_col] if id_col is not None else pd.Series(0, index=df.index)
 
         for col in numeric_cols:
-            # Use pre-fill nulls when provided; fall back to current column state
-            was_null_before_fill = (
-                original_nulls[col] if original_nulls is not None else df[col].isna()
-            )
-            max_gap = self.max_gap_hours
-            large_gap = gap_hours > max_gap if forward else gap_hours.shift(-1).fillna(0) > max_gap
-            df.loc[was_null_before_fill & large_gap, col] = np.nan
+            observed = df[col].notna()
+            obs_time = time.where(observed)
+            if forward:
+                filled = df[col].groupby(keys, dropna=False).ffill()
+                source_time = obs_time.groupby(keys, dropna=False).ffill()
+                distance = time - source_time
+            else:
+                filled = df[col].groupby(keys, dropna=False).bfill()
+                source_time = obs_time.groupby(keys, dropna=False).bfill()
+                distance = source_time - time
+            df[col] = filled.where(observed | (distance <= limit))
 
         return df

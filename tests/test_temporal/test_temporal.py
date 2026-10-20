@@ -502,11 +502,16 @@ class TestImputer:
         result = imputer.transform(df)
         assert result["hr"].iloc[1] == pytest.approx(80.0)
 
-    def test_mask_large_gaps_skipped_when_time_col_absent(self):
+    def test_max_gap_hours_raises_when_time_col_absent_from_df(self):
+        # Silently skipping the limit would fill across gaps of any length.
         df = pd.DataFrame({"hr": [70.0, np.nan, 80.0]})
         imputer = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=1, time_col="charttime")
-        result = imputer.fit_transform(df)  # charttime not in df → gap masking skipped
-        assert result["hr"].iloc[1] == pytest.approx(70.0)  # ffill still ran
+        with pytest.raises(ValueError, match="charttime"):
+            imputer.fit_transform(df)
+
+    def test_max_gap_hours_requires_time_col(self):
+        with pytest.raises(ValueError, match="time_col"):
+            Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=1)
 
     def test_originally_non_null_values_not_masked(self):
         times = pd.to_datetime(
@@ -724,6 +729,138 @@ class TestImputer:
 # ---------------------------------------------------------------------------
 # LagFeatureBuilder tests
 # ---------------------------------------------------------------------------
+
+
+class TestImputerReviewRegressions:
+    """Regressions reported in the pyOpenSci review (clinops#12, #13, #14)."""
+
+    # --- #12: per-patient MEAN/MEDIAN must use fitted statistics -------------
+
+    @pytest.mark.parametrize(
+        ("strategy", "patient_1", "unseen"),
+        [(ImputationStrategy.MEAN, 70.0, 85.0), (ImputationStrategy.MEDIAN, 70.0, 90.0)],
+    )
+    def test_per_patient_uses_fitted_stats(self, strategy, patient_1, unseen):
+        train = pd.DataFrame({"subject_id": [1, 1, 2, 2], "hr": [60.0, 80.0, 100.0, 100.0]})
+        test = pd.DataFrame({"subject_id": [1, 1, 3, 3], "hr": [None, 200.0, None, 10.0]})
+        imputer = Imputer(strategy, per_patient=True, id_col="subject_id").fit(train)
+        result = imputer.transform(test)["hr"].tolist()
+        # Patient 1 gets its own training statistic; unseen patient 3 gets the
+        # training-set statistic, never a value computed from the test data.
+        assert result == pytest.approx([patient_1, 200.0, unseen, 10.0])
+
+    def test_global_mean_uses_fitted_stats_not_transform_data(self):
+        train = pd.DataFrame({"hr": [60.0, 80.0]})
+        test = pd.DataFrame({"hr": [None, 500.0]})
+        result = Imputer(ImputationStrategy.MEAN).fit(train).transform(test)
+        assert result["hr"].iloc[0] == pytest.approx(70.0)
+
+    def test_per_patient_mean_does_not_impute_id_col(self):
+        train = pd.DataFrame({"subject_id": [1, 2], "hr": [60.0, 80.0]})
+        imputer = Imputer(ImputationStrategy.MEAN, per_patient=True, id_col="subject_id")
+        imputer.fit(train)
+        assert "subject_id" not in imputer._fill_values
+
+    def test_per_patient_requires_id_col(self):
+        with pytest.raises(ValueError, match="id_col"):
+            Imputer(ImputationStrategy.MEAN, per_patient=True)
+
+    # --- #13: max_gap_hours measured from the last observation ---------------
+
+    def _dense_lactate(self):
+        t = pd.date_range("2150-01-01", periods=7, freq="h")
+        return pd.DataFrame(
+            {"subject_id": 1, "charttime": t, "hr": [80.0] * 7, "lactate": [4.0] + [np.nan] * 6}
+        )
+
+    def test_forward_fill_gap_limit_with_dense_rows(self):
+        imp = Imputer(
+            ImputationStrategy.FORWARD_FILL,
+            max_gap_hours=2,
+            time_col="charttime",
+            id_col="subject_id",
+        )
+        result = imp.transform(self._dense_lactate())["lactate"].tolist()
+        assert result[:3] == [4.0, 4.0, 4.0]
+        assert all(np.isnan(v) for v in result[3:])
+
+    def test_backward_fill_gap_limit_with_dense_rows(self):
+        df = self._dense_lactate()
+        df["lactate"] = [np.nan] * 6 + [4.0]
+        imp = Imputer(ImputationStrategy.BACKWARD_FILL, max_gap_hours=2, time_col="charttime")
+        result = imp.transform(df)["lactate"].tolist()
+        assert all(np.isnan(v) for v in result[:4])
+        assert result[4:] == [4.0, 4.0, 4.0]
+
+    def test_gap_limit_preserves_row_order(self):
+        df = self._dense_lactate().iloc[::-1].reset_index(drop=True)
+        imp = Imputer(ImputationStrategy.FORWARD_FILL, max_gap_hours=2, time_col="charttime")
+        result = imp.transform(df)
+        assert result["charttime"].tolist() == df["charttime"].tolist()
+        assert result["lactate"].tolist()[-3:] == [4.0, 4.0, 4.0]
+
+    # --- #14: LINEAR respects id_col -------------------------------------------
+
+    def test_linear_interpolates_within_patient(self):
+        df = pd.DataFrame(
+            {"subject_id": [1, 1, 1, 2, 2, 2], "hr": [60.0, 62.0, None, None, 120.0, 118.0]}
+        )
+        result = Imputer(ImputationStrategy.LINEAR, id_col="subject_id").fit_transform(df)
+        # Edge values come from the same patient only.
+        assert result["hr"].tolist() == pytest.approx([60.0, 62.0, 62.0, 120.0, 120.0, 118.0])
+
+    def test_linear_without_id_col_unchanged(self):
+        df = pd.DataFrame({"hr": [60.0, None, 80.0]})
+        result = Imputer(ImputationStrategy.LINEAR).fit_transform(df)
+        assert result["hr"].iloc[1] == pytest.approx(70.0)
+
+
+class TestWindowerImputation:
+    """TemporalWindower(imputation=...) must change the output (clinops#15)."""
+
+    def _df(self):
+        return pd.DataFrame(
+            {
+                "subject_id": [1] * 8 + [2] * 8,
+                "charttime": list(pd.date_range("2150-01-01", periods=8, freq="h")) * 2,
+                "hr": [80.0, 82.0, 84.0, 86.0] + [np.nan] * 4 + [np.nan] * 4 + [60.0] * 4,
+                "label": [0] * 8 + [1] * 8,
+            }
+        )
+
+    def _windows(self, strategy):
+        w = TemporalWindower(window_hours=4, step_hours=4, imputation=strategy)
+        return w.fit_transform(
+            self._df(), id_col="subject_id", time_col="charttime", feature_cols=["hr"]
+        )
+
+    def test_forward_fill_carries_previous_window_within_subject(self):
+        hr = self._windows(ImputationStrategy.FORWARD_FILL)["hr"].tolist()
+        # Subject 2's first window stays empty: nothing is carried across subjects.
+        assert hr[:2] == [83.0, 83.0]
+        assert np.isnan(hr[2]) and hr[3] == 60.0
+
+    def test_zero(self):
+        hr = self._windows(ImputationStrategy.ZERO)["hr"].tolist()
+        assert hr == [83.0, 0.0, 0.0, 60.0]
+
+    def test_none_leaves_nan(self):
+        hr = self._windows(ImputationStrategy.NONE)["hr"].tolist()
+        assert hr[0] == 83.0 and np.isnan(hr[1]) and np.isnan(hr[2])
+
+    def test_indicator_adds_missing_column(self):
+        w = self._windows(ImputationStrategy.INDICATOR)
+        assert w["hr_missing"].tolist() == [0, 1, 1, 0]
+
+    def test_id_and_window_columns_untouched(self):
+        w = self._windows(ImputationStrategy.ZERO)
+        assert w["subject_id"].tolist() == [1, 1, 2, 2]
+        assert w["window_start"].notna().all()
+
+    @pytest.mark.parametrize("strategy", [ImputationStrategy.MEAN, ImputationStrategy.MEDIAN])
+    def test_mean_median_rejected(self, strategy):
+        with pytest.raises(ValueError, match="Imputer"):
+            TemporalWindower(imputation=strategy)
 
 
 class TestLagFeatureBuilder:
