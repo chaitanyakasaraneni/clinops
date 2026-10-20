@@ -56,7 +56,7 @@ raw EHR data
 
 ### [e2e_example.py](../examples/e2e_example.py)
 
-A single runnable Python script that exercises the full v0.1 pipeline. Useful for
+A single runnable Python script that exercises the core pipeline end to end. Useful for
 quick smoke-testing after installation.
 
 ```bash
