@@ -351,7 +351,7 @@ class EicuLoader:
                 # pyarrow.parquet.read_schema lacks a return annotation, so
                 # mypy --strict flags the call; the result is a pyarrow Schema.
                 available: list[str] = list(
-                    pq.read_schema(path).names  # type: ignore[no-untyped-call]
+                    pq.read_schema(path).names  # type: ignore[no-untyped-call, unused-ignore]
                 )
             else:
                 available = list(pd.read_csv(path, nrows=0).columns)
