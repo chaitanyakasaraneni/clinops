@@ -35,7 +35,10 @@ class ColumnSpec:
     """Specification for a single column in a clinical table."""
 
     name: str
-    dtype: str | None = None  # e.g. "int64", "float64", "datetime64[ns]"
+    # Expected dtype family, e.g. "int64", "float64", "datetime64[ns]", "str",
+    # "bool", "category". Checked by kind: any integer dtype satisfies "int64";
+    # integer or float satisfies "float64"; object or string satisfies "str".
+    dtype: str | None = None
     nullable: bool = True
     min_value: float | None = None
     max_value: float | None = None
@@ -54,7 +57,8 @@ class ClinicalSchema:
     columns:
         List of ColumnSpec objects describing required and optional columns.
     allow_extra_columns:
-        If True (default), columns not in the spec are silently allowed.
+        If True (default), columns not in the spec are allowed. If False,
+        any column not listed in ``columns`` is a violation.
 
     Example
     -------
@@ -91,6 +95,17 @@ class ClinicalSchema:
         """
         violations: list[str] = []
 
+        def report(msg: str) -> None:
+            violations.append(msg)
+            if strict:
+                raise SchemaValidationError(msg)
+
+        if not self.allow_extra_columns:
+            expected = {spec.name for spec in self.columns}
+            extra = [c for c in df.columns if c not in expected]
+            if extra:
+                report(f"[{self.name}] Unexpected columns {extra} (allow_extra_columns=False)")
+
         for spec in self.columns:
             if spec.name not in df.columns:
                 msg = f"[{self.name}] Missing required column: '{spec.name}'"
@@ -112,7 +127,21 @@ class ClinicalSchema:
                 if strict:
                     raise SchemaValidationError(msg)
 
-            # Range checks (numeric only)
+            # Dtype check
+            if spec.dtype is not None and not _dtype_matches(col, spec.dtype):
+                report(
+                    f"[{self.name}] Column '{spec.name}' has dtype '{col.dtype}', "
+                    f"expected '{spec.dtype}'"
+                )
+
+            # Range checks need a numeric column; a text column cannot be range-checked.
+            has_range = spec.min_value is not None or spec.max_value is not None
+            if has_range and not pd.api.types.is_numeric_dtype(col) and col.notna().any():
+                report(
+                    f"[{self.name}] Column '{spec.name}' has non-numeric dtype "
+                    f"'{col.dtype}', so min_value/max_value cannot be checked"
+                )
+
             if spec.min_value is not None and pd.api.types.is_numeric_dtype(col):
                 out_of_range = (col < spec.min_value).sum()
                 if out_of_range:
@@ -149,3 +178,25 @@ class ClinicalSchema:
                         raise SchemaValidationError(msg)
 
         return violations
+
+
+def _dtype_matches(col: pd.Series[Any], expected: str) -> bool:
+    """Check ``col``'s dtype against the dtype family named by ``expected``."""
+    actual = col.dtype
+    api = pd.api.types
+    name = expected.lower()
+    if name.startswith(("int", "uint")):
+        return bool(api.is_integer_dtype(col))
+    if name.startswith("float"):
+        return bool(api.is_numeric_dtype(col)) and not api.is_bool_dtype(col)
+    if name.startswith("datetime"):
+        return bool(api.is_datetime64_any_dtype(col))
+    if name.startswith("timedelta"):
+        return bool(api.is_timedelta64_dtype(col))
+    if name in {"str", "string", "object"}:
+        return bool(api.is_string_dtype(col) or api.is_object_dtype(col))
+    if name in {"bool", "boolean"}:
+        return bool(api.is_bool_dtype(col))
+    if name == "category":
+        return isinstance(actual, pd.CategoricalDtype)
+    return str(actual).lower() == name

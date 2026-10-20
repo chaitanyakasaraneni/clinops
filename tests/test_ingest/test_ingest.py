@@ -414,3 +414,99 @@ class TestFHIRLoader:
         df = loader.patients()
         assert len(df) == 2
         assert set(df["patient_id"]) == {"p1", "p2"}
+
+
+class TestReviewedParameters:
+    """Documented parameters that used to be ignored (clinops#17)."""
+
+    def _obs(self, oid, loinc, category):
+        return {
+            "resource": {
+                "resourceType": "Observation",
+                "id": oid,
+                "subject": {"reference": "Patient/p1"},
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": category,
+                            }
+                        ]
+                    }
+                ],
+                "code": {"coding": [{"system": "http://loinc.org", "code": loinc}]},
+                "valueQuantity": {"value": 1.0},
+            }
+        }
+
+    def _loader(self, tmp_path):
+        import json
+
+        bundle = {
+            "resourceType": "Bundle",
+            "entry": [
+                self._obs("hr", "8867-4", "vital-signs"),
+                self._obs("cr", "2160-0", "laboratory"),
+            ],
+        }
+        path = tmp_path / "obs.json"
+        path.write_text(json.dumps(bundle))
+        return FHIRLoader(path)
+
+    def test_fhir_category_filter(self, tmp_path):
+        loader = self._loader(tmp_path)
+        assert loader.observations()["observation_id"].tolist() == ["hr", "cr"]
+        assert loader.observations(category="vital-signs")["observation_id"].tolist() == ["hr"]
+        assert loader.observations(category="laboratory")["observation_id"].tolist() == ["cr"]
+
+    def test_fhir_unknown_category_returns_empty_frame_with_columns(self, tmp_path):
+        obs = self._loader(tmp_path).observations(category="no-such-cat", loinc_codes=["8867-4"])
+        assert obs.empty
+        assert "loinc_code" in obs.columns
+
+    def test_dtype_mismatch_reported(self):
+        schema = ClinicalSchema(name="v", columns=[ColumnSpec("heart_rate", dtype="float64")])
+        violations = schema.validate(pd.DataFrame({"heart_rate": ["80", "90"]}), strict=False)
+        assert any("dtype" in v for v in violations)
+        with pytest.raises(SchemaValidationError, match="dtype"):
+            schema.validate(pd.DataFrame({"heart_rate": ["80"]}))
+
+    @pytest.mark.parametrize(
+        ("dtype", "values"),
+        [
+            ("float64", [80, 90]),  # integer readings satisfy a float spec
+            ("float64", [80.5, None]),
+            ("int64", pd.array([1, None], dtype="Int64")),
+            ("str", ["a", "b"]),
+            ("datetime64[ns]", pd.to_datetime(["2150-01-01"] * 2)),
+            ("bool", [True, False]),
+        ],
+    )
+    def test_dtype_family_matches(self, dtype, values):
+        schema = ClinicalSchema(name="v", columns=[ColumnSpec("c", dtype=dtype)])
+        assert schema.validate(pd.DataFrame({"c": values})) == []
+
+    def test_allow_extra_columns_false(self):
+        schema = ClinicalSchema(
+            name="v", columns=[ColumnSpec("heart_rate")], allow_extra_columns=False
+        )
+        df = pd.DataFrame({"heart_rate": [80.0], "note": ["a"]})
+        with pytest.raises(SchemaValidationError, match="note"):
+            schema.validate(df)
+        assert schema.validate(df[["heart_rate"]]) == []
+
+    def test_extra_columns_allowed_by_default(self):
+        schema = ClinicalSchema(name="v", columns=[ColumnSpec("heart_rate")])
+        assert schema.validate(pd.DataFrame({"heart_rate": [80.0], "note": ["a"]})) == []
+
+    def test_range_on_text_column_reported(self):
+        # The reviewer's example: every check used to pass silently.
+        schema = ClinicalSchema(
+            name="vitals",
+            columns=[ColumnSpec("heart_rate", dtype="float64", min_value=0, max_value=300)],
+            allow_extra_columns=False,
+        )
+        df = pd.DataFrame({"heart_rate": ["80", "9999"], "note": ["a", "b"]})
+        violations = schema.validate(df, strict=False)
+        assert len(violations) == 3  # extra column, dtype, non-numeric range check

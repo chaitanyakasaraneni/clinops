@@ -454,3 +454,20 @@ class TestErrors:
         loader = MimicIIILoader(tmp_path, strict_validation=False)
         df = loader.chartevents()  # should not raise
         assert len(df) == 1
+
+
+class TestChunkedLoading:
+    """Chunked reads filter per chunk and match a full read (clinops#16)."""
+
+    @pytest.mark.parametrize("chunk_size", [1, 2, 1000])
+    @pytest.mark.parametrize("kwargs", [{}, {"subject_ids": [1]}])
+    def test_chartevents_matches_unchunked(self, mimic3_dir, chunk_size, kwargs):
+        expected = MimicIIILoader(mimic3_dir).chartevents(**kwargs)
+        result = MimicIIILoader(mimic3_dir, chunk_size=chunk_size).chartevents(**kwargs)
+        pd.testing.assert_frame_equal(result, expected)
+
+    @pytest.mark.parametrize("chunk_size", [1, 1000])
+    def test_labevents_matches_unchunked(self, mimic3_dir, chunk_size):
+        expected = MimicIIILoader(mimic3_dir).labevents(subject_ids=[1])
+        result = MimicIIILoader(mimic3_dir, chunk_size=chunk_size).labevents(subject_ids=[1])
+        pd.testing.assert_frame_equal(result, expected)

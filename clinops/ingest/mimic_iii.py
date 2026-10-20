@@ -51,7 +51,7 @@ Sci Data 3, 160035 (2016). https://doi.org/10.1038/sdata.2016.35
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pandas as pd
@@ -173,8 +173,10 @@ class MimicIIILoader:
         If ``True`` (default), raise :exc:`SchemaValidationError` when
         required columns are missing. If ``False``, log a warning and continue.
     chunk_size:
-        If set, large tables (``chartevents``, ``labevents``) return a chunked
-        reader instead of loading fully into memory.
+        If set, ``chartevents`` and ``labevents`` CSV files are read in chunks
+        of this many rows, and the requested filters are applied to each chunk
+        before the next is read. Only matching rows are kept in memory, so
+        pass ``subject_ids``, ``item_ids`` or a time range to benefit.
 
     Examples
     --------
@@ -236,16 +238,18 @@ class MimicIIILoader:
             ``icustay_id``, ``itemid``, ``charttime`` (datetime),
             ``valuenum``, ``valueuom``.
         """
-        df = self._load("chartevents")
-        return self._filter(
-            df,
-            subject_ids,
-            hadm_ids,
-            icustay_ids=icustay_ids,
-            item_ids=item_ids,
-            start_time=start_time,
-            end_time=end_time,
-            time_col="charttime",
+        return self._load(
+            "chartevents",
+            lambda df: self._filter(
+                df,
+                subject_ids,
+                hadm_ids,
+                icustay_ids=icustay_ids,
+                item_ids=item_ids,
+                start_time=start_time,
+                end_time=end_time,
+                time_col="charttime",
+            ),
         )
 
     def labevents(
@@ -274,15 +278,17 @@ class MimicIIILoader:
             Columns: ``subject_id``, ``hadm_id``, ``itemid``,
             ``charttime`` (datetime), ``valuenum``, ``valueuom``.
         """
-        df = self._load("labevents")
-        df = self._filter(
-            df,
-            subject_ids,
-            hadm_ids,
-            item_ids=item_ids,
-            start_time=start_time,
-            end_time=end_time,
-            time_col="charttime",
+        df = self._load(
+            "labevents",
+            lambda df: self._filter(
+                df,
+                subject_ids,
+                hadm_ids,
+                item_ids=item_ids,
+                start_time=start_time,
+                end_time=end_time,
+                time_col="charttime",
+            ),
         )
         if not with_ref_range:
             drop = [c for c in ["ref_range_lower", "ref_range_upper"] if c in df.columns]
@@ -550,39 +556,48 @@ class MimicIIILoader:
             f"Expected one of: {stem}.csv.gz, {stem}.csv, {stem}.parquet"
         )
 
-    def _load(self, table_name: str) -> pd.DataFrame:
-        """Load, normalise columns, parse datetimes, validate schema."""
+    def _load(
+        self,
+        table_name: str,
+        row_filter: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
+    ) -> pd.DataFrame:
+        """
+        Load, normalise columns, parse datetimes, validate schema, apply ``row_filter``.
+
+        With ``chunk_size`` set, ``chartevents`` and ``labevents`` CSV files are
+        read chunk by chunk and ``row_filter`` is applied to each chunk, so only
+        matching rows are kept in memory.
+        """
         path = self._resolve_path(table_name)
         logger.debug(f"Loading MIMIC-III {table_name} from {path}")
 
-        read_kwargs: dict[str, object] = {}
-        if self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
-            read_kwargs["chunksize"] = self._cfg.chunk_size
+        chunk_size = self._cfg.chunk_size
+        if chunk_size and path.suffix != ".parquet" and table_name in {"chartevents", "labevents"}:
+            parts = []
+            with pd.read_csv(path, low_memory=False, chunksize=chunk_size) as reader:
+                for i, chunk in enumerate(reader):
+                    chunk = _normalise_columns(chunk)
+                    if i == 0:
+                        self._validate_schema(chunk, table_name)
+                    chunk = self._parse_datetimes(chunk, table_name)
+                    parts.append(row_filter(chunk) if row_filter else chunk)
+            if parts:
+                return pd.concat(parts, ignore_index=True)
+            # Header-only file: no chunks are yielded.
+            df = _normalise_columns(pd.read_csv(path, nrows=0))
+            self._validate_schema(df, table_name)
+            return df
 
         if path.suffix == ".parquet":
             df = pd.read_parquet(path)
-        elif self._cfg.chunk_size and table_name in {"chartevents", "labevents"}:
-            chunks = pd.read_csv(path, low_memory=False, chunksize=self._cfg.chunk_size)
-            processed = []
-            for chunk in chunks:
-                chunk = _normalise_columns(chunk)
-                chunk = self._parse_datetimes(chunk, table_name)
-                self._validate_schema(chunk, table_name)
-                processed.append(chunk)
-            df = pd.concat(processed, ignore_index=True)
         else:
             df = pd.read_csv(path, low_memory=False)
-
-        if isinstance(df, pd.DataFrame) and not (
-            self._cfg.chunk_size and table_name in {"chartevents", "labevents"}
-        ):
-            df = _normalise_columns(df)
-            if table_name == "diagnoses_icd" and "icd9_code" in df.columns:
-                df["icd9_code"] = df["icd9_code"].astype(str)
-            df = self._parse_datetimes(df, table_name)
-            self._validate_schema(df, table_name)
-
-        return df
+        df = _normalise_columns(df)
+        if table_name == "diagnoses_icd" and "icd9_code" in df.columns:
+            df["icd9_code"] = df["icd9_code"].astype(str)
+        df = self._parse_datetimes(df, table_name)
+        self._validate_schema(df, table_name)
+        return row_filter(df) if row_filter else df
 
     def _parse_datetimes(self, df: pd.DataFrame, table_name: str) -> pd.DataFrame:
         for col in _DATETIME_COLS.get(table_name, []):
