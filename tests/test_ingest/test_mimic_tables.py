@@ -10,6 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+from clinops.ingest.mimic import MimicLoader
 from clinops.ingest.mimic_tables import MimicTableLoader
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,26 @@ class TestChartevents:
     def test_charttime_parsed_as_datetime(self, loader):
         df = loader.chartevents()
         assert pd.api.types.is_datetime64_any_dtype(df["charttime"])
+
+    def test_filter_by_time_range(self, loader):
+        df = loader.chartevents(start_time="2150-01-01 10:00:00", end_time="2150-01-02 00:00:00")
+        assert len(df) == 1
+        assert df.loc[0, "charttime"] == pd.Timestamp("2150-01-01 12:00:00")
+
+
+class TestMimicLoaderCsvDatetimes:
+    """MimicLoader is used directly in the README; CSV text columns must become datetimes."""
+
+    def test_charttime_parsed_as_datetime(self, mimic_dir):
+        df = MimicLoader(mimic_dir).chartevents()
+        assert pd.api.types.is_datetime64_any_dtype(df["charttime"])
+
+    def test_filter_by_time_range(self, mimic_dir):
+        df = MimicLoader(mimic_dir).chartevents(
+            subject_ids=[1], start_time="2150-01-01 00:00:00", end_time="2150-01-01 10:00:00"
+        )
+        assert len(df) == 1
+        assert df.loc[0, "charttime"] == pd.Timestamp("2150-01-01 06:00:00")
 
 
 # ---------------------------------------------------------------------------
