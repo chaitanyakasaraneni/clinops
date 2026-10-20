@@ -508,7 +508,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pytest tests/ -v` and
   title   = {clinops: Clinical ML Pipeline Toolkit},
   year    = {2026},
   url     = {https://github.com/chaitanyakasaraneni/clinops},
-  version = {0.5.0}
+  version = {0.6.0}
 }
 ```
 

@@ -75,4 +75,5 @@ nav:
       - clinops.split: api/split.md
       - clinops.monitor: api/monitor.md
       - clinops.orchestrate: api/orchestrate.md
+  - Changelog: changelog.md
   - Contributing: contributing.md
