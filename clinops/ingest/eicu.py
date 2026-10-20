@@ -59,6 +59,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -478,6 +479,20 @@ _LAB_FEATURES: list[str] = [
     "gcs_total",
 ]
 
+# Variables whose own measurement triggers an organ label. Under
+# label_mode="observed" a criterion fires only in hours where its trigger
+# was measured, not where it was carried forward.
+_LABEL_TRIGGERS = [
+    "map",
+    "lactate",
+    "pao2",
+    "resp_rate",
+    "spo2",
+    "creatinine",
+    "bilirubin",
+    "gcs_total",
+]
+
 #: 3 derived features. SOFA is not pre-computed in eICU (documented gap) and is
 #: emitted as an all-NaN column for schema parity with the MIMIC pipeline;
 #: shock index is computed; APACHE is joined per stay from apachePatientResult.
@@ -579,6 +594,15 @@ class EicuCohortConfig(BaseModel):
         subset). ``None`` (default) uses the full cohort.
     random_state:
         Seed for any sampling. Default 42.
+    label_mode:
+        How organ labels treat carried-forward values. ``"observed"`` (default)
+        marks an hour positive only when the variable that triggers the
+        criterion was actually measured in that hour, so a label reflects new
+        evidence rather than a value carried in from before the prediction
+        horizon. Companion values (FiO2 for the PaO2/FiO2 ratio, baselines)
+        may still be carried forward. ``"locf"`` evaluates the criteria on the
+        forward-filled grid, the behaviour of clinops <= 0.5.0; use it only to
+        reproduce results produced with that definition.
     """
 
     min_age: int = 18
@@ -593,6 +617,7 @@ class EicuCohortConfig(BaseModel):
     hospital_ids: list[int] | None = None
     limit_stays: int | None = None
     random_state: int = 42
+    label_mode: Literal["observed", "locf"] = "observed"
 
     @model_validator(mode="after")
     def _check_consistency(self) -> EicuCohortConfig:
@@ -1063,6 +1088,12 @@ class EicuTableLoader:
         else:
             df["_raw_critical_missingness"] = 0.0
 
+        # Record which label-trigger variables were actually measured each hour,
+        # before carry-forward erases the distinction (see label_mode).
+        for var in _LABEL_TRIGGERS:
+            if var in df.columns:
+                df[f"_observed_{var}"] = df[var].notna()
+
         # Carry-forward measured values within each stay (clinical standard).
         measured = [c for c in (_VITAL_FEATURES + _LAB_FEATURES + ["fio2"]) if c in df.columns]
         df[measured] = df.groupby("patientunitstayid")[measured].ffill()
@@ -1081,6 +1112,7 @@ class EicuTableLoader:
         # Label-support derived columns (kept out of the feature matrix).
         df = self._add_label_support(df)
         df = self._add_labels(df)
+        df = df.drop(columns=[c for c in df.columns if c.startswith("_observed_")])
         return df.reset_index(drop=True)
 
     def _add_label_support(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -1107,24 +1139,41 @@ class EicuTableLoader:
         return df
 
     def _add_labels(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Physiology-only organ-deterioration labels (per stay-hour)."""
-        df["cardiovascular"] = ((df["map"] < 65) | (df["lactate"] > 2.0)).astype(int)
+        """Physiology-only organ-deterioration labels (per stay-hour).
+
+        With ``label_mode="observed"`` each criterion only fires in hours where
+        its trigger variable was measured; see :class:`EicuCohortConfig`.
+        """
+        observed_only = self._cfg.label_mode == "observed"
+
+        def seen(var: str) -> pd.Series[bool]:
+            col = f"_observed_{var}"
+            if observed_only and col in df.columns:
+                return df[col].astype(bool)
+            return pd.Series(True, index=df.index)
+
+        cr = df["creatinine"]
+        rr = df["resp_rate"]
+        gcs = df["gcs_total"]
+
+        df["cardiovascular"] = (
+            (seen("map") & (df["map"] < 65)) | (seen("lactate") & (df["lactate"] > 2.0))
+        ).astype(int)
 
         df["respiratory"] = (
-            (df["pao2_fio2_ratio"] < 300)
-            | (df["resp_rate"] > 30)
-            | (df["resp_rate"] < 8)
-            | (df["spo2"] < 90)
+            (seen("pao2") & (df["pao2_fio2_ratio"] < 300))
+            | (seen("resp_rate") & ((rr > 30) | (rr < 8)))
+            | (seen("spo2") & (df["spo2"] < 90))
         ).astype(int)
 
         df["renal"] = (
-            (df["creatinine"] > 2.0) | (df["creatinine"] >= 1.5 * df["baseline_creatinine"])
+            seen("creatinine") & ((cr > 2.0) | (cr >= 1.5 * df["baseline_creatinine"]))
         ).astype(int)
 
-        df["hepatic"] = (df["bilirubin"] > 2.0).astype(int)
+        df["hepatic"] = (seen("bilirubin") & (df["bilirubin"] > 2.0)).astype(int)
 
         df["neurological"] = (
-            (df["gcs_total"] < 13) | ((df["baseline_gcs"] - df["gcs_total"]) >= 2)
+            seen("gcs_total") & ((gcs < 13) | ((df["baseline_gcs"] - gcs) >= 2))
         ).astype(int)
         return df
 
@@ -1185,7 +1234,9 @@ class EicuTableLoader:
 
         For each stay, an hourly window of ``observation_hours`` produces one
         sample; its label is whether each organ deteriorates at any point in the
-        following ``prediction_hours``. Windows slide hourly.
+        following ``prediction_hours``. Windows slide hourly. Labels count only
+        values measured within the horizon unless ``label_mode="locf"``; see
+        :class:`EicuCohortConfig`.
 
         Parameters
         ----------

@@ -155,6 +155,15 @@ The feature matrix is checked against a programmatic exclusion list before it is
 returned — if a label-defining variable (e.g. a patient's baseline creatinine or
 the PaO2/FiO2 ratio) ever reaches the feature set, a `LeakageError` is raised.
 
+Labels are computed only from values measured within each hour
+(`label_mode="observed"`, the default). Features are forward-filled within each
+stay, but a value carried forward from before the prediction horizon never makes
+a horizon hour positive on its own. Otherwise, a single abnormal creatinine at
+admission would mark every later horizon as renal deterioration, and the same
+value would also appear in the observation window as a feature. Set
+`label_mode="locf"` only to reproduce results from clinops 0.5.0 or earlier,
+which evaluated the criteria on the forward-filled grid.
+
 ---
 
 ## FlatFileLoader

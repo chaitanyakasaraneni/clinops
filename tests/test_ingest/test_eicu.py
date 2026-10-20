@@ -635,3 +635,54 @@ def test_dnr_skips_when_columns_missing(tmp_path: Path):
     )
     loader = EicuTableLoader(d, config=TEST_CFG)
     assert loader._dnr_stays(within_minutes=360) == set()
+
+
+# ---------------------------------------------------------------------------
+# label_mode (clinops#18): carried-forward values must not create labels
+# ---------------------------------------------------------------------------
+
+
+def _single_high_creatinine(eicu_dir: Path, stay: int = 201) -> None:
+    """Creatinine for ``stay`` measured once (3.0 at hour 0) and never again."""
+    path = eicu_dir / "lab.csv"
+    lab = pd.read_csv(path)
+    is_cr = (lab["patientunitstayid"] == stay) & (lab["labname"] == "creatinine")
+    first = lab[is_cr]["labresultoffset"].min()
+    lab = lab[~is_cr | (lab["labresultoffset"] == first)].copy()
+    lab.loc[is_cr & (lab["labresultoffset"] == first), "labresult"] = 3.0
+    lab.to_csv(path, index=False)
+
+
+def _renal(eicu_dir: Path, label_mode: str, stay: int = 201) -> list[int]:
+    cfg = TEST_CFG.model_copy(update={"label_mode": label_mode})
+    labels = EicuTableLoader(eicu_dir, config=cfg).build_labels()
+    return labels[labels["patientunitstayid"] == stay].sort_values("hour")["renal"].tolist()
+
+
+def test_observed_labels_ignore_carried_forward_values(eicu_dir: Path):
+    _single_high_creatinine(eicu_dir)
+    renal = _renal(eicu_dir, "observed")
+    # Only the hour the 3.0 was measured is positive.
+    assert renal[0] == 1
+    assert renal[1:] and set(renal[1:]) == {0}
+
+
+def test_locf_labels_reproduce_previous_definition(eicu_dir: Path):
+    _single_high_creatinine(eicu_dir)
+    renal = _renal(eicu_dir, "locf")
+    assert set(renal) == {1}
+
+
+def test_default_label_mode_is_observed():
+    assert EicuCohortConfig().label_mode == "observed"
+
+
+def test_observed_flags_not_in_outputs(eicu_dir: Path):
+    loader = EicuTableLoader(eicu_dir, config=TEST_CFG)
+    for frame in (loader.build_labels(), loader.build_feature_matrix()):
+        assert not any(c.startswith("_observed_") for c in frame.columns)
+
+
+def test_invalid_label_mode_rejected():
+    with pytest.raises(ValueError):
+        EicuCohortConfig(label_mode="carry")
