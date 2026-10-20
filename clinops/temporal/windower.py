@@ -37,7 +37,8 @@ class WindowConfig:
         Minimum number of non-null observations required per window.
         Windows below this threshold are dropped.
     imputation:
-        Strategy used to fill gaps within each window.
+        Strategy for features with no observations in a window; see
+        :class:`TemporalWindower`.
     aggregations:
         Dict mapping feature column names to aggregation functions.
         Defaults to mean for all numeric columns.
@@ -70,7 +71,15 @@ class TemporalWindower:
         Step between window starts in hours. Use same value as window_hours
         for non-overlapping (tumbling) windows.
     imputation:
-        Imputation strategy for within-window missing values.
+        How to fill features that have no observations in a window. Applied
+        across each subject's windows in time order after aggregation:
+        ``FORWARD_FILL`` carries the previous window's value, ``ZERO`` fills 0,
+        ``INDICATOR`` adds ``{col}_missing`` columns, ``NONE`` leaves NaN.
+        ``BACKWARD_FILL`` and ``LINEAR`` draw on later windows, which leaks
+        future information into prediction features. ``MEAN`` and ``MEDIAN``
+        are not accepted here because they would be computed over every
+        subject, including any later test set; apply :class:`Imputer` after
+        splitting instead.
     min_observations:
         Drop windows with fewer non-null observations than this threshold.
     aggregations:
@@ -113,7 +122,17 @@ class TemporalWindower:
             label_col=label_col,
             label_fn=label_fn,
         )
-        self._imputer = Imputer(imputation)
+        if imputation in (ImputationStrategy.MEAN, ImputationStrategy.MEDIAN):
+            raise ValueError(
+                f"imputation={imputation.value!r} is not supported in TemporalWindower because "
+                "the statistic would be computed across all subjects. Window with "
+                "ImputationStrategy.NONE, split, then fit an Imputer on the training set."
+            )
+        if imputation in (ImputationStrategy.BACKWARD_FILL, ImputationStrategy.LINEAR):
+            logger.warning(
+                f"imputation={imputation.value!r} fills windows from later windows, so features "
+                "can include information from after the window ends"
+            )
 
     def fit_transform(
         self,
@@ -211,6 +230,7 @@ class TemporalWindower:
             return pd.DataFrame()
 
         result_df = pd.DataFrame(results)
+        result_df = self._impute_windows(result_df, id_col, feature_cols)
         logger.info(
             f"Extracted {len(result_df):,} windows across {result_df[id_col].nunique()} subjects"
         )
@@ -219,6 +239,20 @@ class TemporalWindower:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _impute_windows(
+        self, result_df: pd.DataFrame, id_col: str, feature_cols: list[str]
+    ) -> pd.DataFrame:
+        """Fill empty windows per subject; only feature columns are touched."""
+        if self.config.imputation == ImputationStrategy.NONE:
+            return result_df
+        cols = [c for c in feature_cols if c in result_df.columns]
+        imputer = Imputer(self.config.imputation, id_col=id_col)
+        imputed = imputer.transform(result_df[[id_col, *cols]])
+        for col in imputed.columns:
+            if col != id_col:
+                result_df[col] = imputed[col].to_numpy()
+        return result_df
 
     def _aggregate_window(
         self,

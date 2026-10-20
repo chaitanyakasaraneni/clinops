@@ -52,7 +52,10 @@ windower = TemporalWindower(
 
 ## Imputer
 
-Gap-aware imputation for clinical time-series. When `id_col` is provided, fill is applied within each patient/admission independently — values never propagate across entity boundaries.
+Gap-aware imputation for clinical time-series. When `id_col` is provided, `FORWARD_FILL`, `BACKWARD_FILL`, and `LINEAR` are applied within each patient/admission independently, so values never propagate across entity boundaries.
+
+!!! warning "Set `id_col` on multi-patient data"
+    Without `id_col`, the whole DataFrame is treated as one series. On a table with several patients, fill and interpolation would carry values from one patient into the next.
 
 ```python
 from clinops.temporal import Imputer, ImputationStrategy
@@ -81,7 +84,7 @@ test_windows = imputer.transform(test_windows)
 
 ### Per-patient mean/median
 
-Compute imputation statistics per patient rather than globally (avoids leakage when patients have very different baseline values):
+Compute imputation statistics per patient rather than globally. `fit()` learns each patient's statistic from the training data, and `transform()` uses it. Patients that were not in the training data (for example, a patient-level test set) fall back to the training-set statistic, so no statistic is ever computed from the data being transformed:
 
 ```python
 imputer = Imputer(
@@ -90,11 +93,12 @@ imputer = Imputer(
     id_col="subject_id",
 )
 imputer.fit(train_windows)
+test_windows = imputer.transform(test_windows)
 ```
 
 ### max_gap_hours
 
-For `FORWARD_FILL` and `BACKWARD_FILL`, `max_gap_hours` prevents propagating stale values across long gaps. A NaN that was filled across a gap larger than the threshold is restored to `NaN`:
+For `FORWARD_FILL` and `BACKWARD_FILL`, `max_gap_hours` prevents propagating stale values across long gaps. A missing value is filled only if the observation it would be filled from is at most `max_gap_hours` away. The distance is measured per column from the last (or next) actual observation, so hourly vitals rows do not keep a single lab value alive indefinitely. `max_gap_hours` requires `time_col`; a `ValueError` is raised if it is missing:
 
 ```python
 # Fill gaps up to 4 hours; leave longer gaps as NaN
