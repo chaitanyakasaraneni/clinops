@@ -16,8 +16,8 @@ authors:
 repository-code: "https://github.com/chaitanyakasaraneni/clinops"
 url: "https://clinops.readthedocs.io"
 license: Apache-2.0
-version: 0.6.0
-date-released: "2026-10-19"
+version: 0.6.1
+date-released: "2026-10-22"
 keywords:
   - healthcare
   - clinical machine learning

@@ -21,7 +21,7 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("clinops")
 except PackageNotFoundError:
-    __version__ = "0.6.0-dev"
+    __version__ = "0.6.1-dev"
 
 __author__ = "Chaitanya Kasaraneni"
 __email__ = "kc.kasaraneni@gmail.com"

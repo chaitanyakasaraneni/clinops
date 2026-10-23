@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.6.1
+
+A patch release with one bug fix and documentation, testing, and packaging
+improvements from the [pyOpenSci review](https://github.com/pyOpenSci/software-submission/issues/362).
+No other behavior changes.
+
+### Fixed
+
+- `ICDMapper.harmonize(..., output_col=...)` left rows that were already ICD-10
+  as NaN in the output column; they are now carried over. Harmonizing in place
+  (no `output_col`) was not affected.
+  ([#26](https://github.com/chaitanyakasaraneni/clinops/pull/26))
+
+### Documentation
+
+- Tutorials are rendered with outputs in the docs and executed on every build.
+  The README links to them. The previous docs links to the notebooks returned 404.
+  ([#25](https://github.com/chaitanyakasaraneni/clinops/pull/25))
+- Every docstring example is now self-contained and runnable, and CI checks
+  that each one produces the output it shows. `Imputer` gained an example, and
+  `LagFeatureBuilder`'s example no longer passes `id_col` to `fit_transform()`.
+  ([#26](https://github.com/chaitanyakasaraneni/clinops/pull/26))
+- Corrected feature counts: `UnitNormalizer` has 26 conversions (not 30) and
+  `ClinicalOutlierClipper` has 37 built-in bounds (not 20). The preprocess guide's
+  conversion table now matches `UNIT_CONVERSIONS`.
+  ([#25](https://github.com/chaitanyakasaraneni/clinops/pull/25))
+- Added `CITATION.cff`, which enables GitHub's "Cite this repository".
+  ([#25](https://github.com/chaitanyakasaraneni/clinops/pull/25))
+
+### Testing and packaging
+
+- Python 3.13 and 3.14 are tested in CI and listed in the classifiers. Publishing
+  to PyPI now requires those jobs and the strict docs build to pass.
+  ([#27](https://github.com/chaitanyakasaraneni/clinops/pull/27))
+- `clinops.orchestrate` storage and Step Functions I/O are tested against fake
+  clients. Total coverage is now 94%.
+  ([#27](https://github.com/chaitanyakasaraneni/clinops/pull/27))
+
 ## 0.6.0
 
 This release fixes issues found during the
