@@ -59,7 +59,7 @@ alongside modelling libraries rather than instead of them.
 | Patient-level splits | `PatientSplitter`, `StratifiedPatientSplitter`, `GroupedPatientSplitter` | `split_by_patient` | `GroupShuffleSplit`, `GroupKFold`, `StratifiedGroupKFold` |
 | Timestamp cutoff split | `TemporalSplitter` | No | No (`TimeSeriesSplit` splits by row position) |
 | Physiological range clipping | `ClinicalOutlierClipper` | No | No |
-| Lab unit normalization | `UnitNormalizer` (30 conversions) | No | No |
+| Lab unit normalization | `UnitNormalizer` (26 conversions) | No | No |
 | ICD-9 to ICD-10 mapping | `ICDMapper` | `medcode.CrossMap` | No |
 | Drift and data quality monitoring | `clinops.monitor` | No | No |
 | Models and training | No | Yes | Yes |
@@ -121,6 +121,14 @@ something here is out of date, please open an issue.
 ```bash
 pip install clinops
 ```
+
+**Tutorials** (rendered with outputs in the docs; all use synthetic data, so no MIMIC access is needed):
+
+- [01: Getting started](https://clinops.readthedocs.io/en/latest/tutorials/01_getting_started/): a module-by-module walkthrough of ingest, preprocess, temporal, and split.
+- [02: ICU mortality pipeline](https://clinops.readthedocs.io/en/latest/tutorials/02_icu_mortality_pipeline/): raw EHR-style tables to leakage-safe, model-ready train/test arrays.
+- [`examples/e2e_example.py`](examples/e2e_example.py): a single script that runs the core pipeline, useful as a post-install smoke test.
+
+The [user guide](https://clinops.readthedocs.io/en/latest/guide/ingest/) covers each module in depth, and the [API reference](https://clinops.readthedocs.io/en/latest/api/ingest/) documents every class.
 
 ---
 
@@ -263,7 +271,7 @@ print(clipper.report())
 #        spo2             1              0         0.004         50         100
 ```
 
-Built-in bounds cover 20 vitals and labs (`heart_rate`, `spo2`, `sbp`, `glucose`,
+Built-in bounds cover 37 variables, 12 vitals and 25 labs (`heart_rate`, `spo2`, `sbp`, `glucose`,
 `creatinine`, `ph`, `wbc`, and more). Add site-specific ranges with `add_bounds()`.
 
 ### Normalize units across sites
@@ -285,8 +293,8 @@ print(normalizer.report())
 #  glucose    mmol/L   mg/dL          142
 ```
 
-30 registered conversions covering glucose, creatinine, bilirubin, haemoglobin,
-calcium, temperature, weight, and height.
+26 registered conversions covering glucose, creatinine, bilirubin, BUN, haemoglobin,
+calcium, phosphate, temperature, weight, and height.
 
 ### Harmonize ICD-9 and ICD-10 codes
 
@@ -501,6 +509,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Run `pytest tests/ -v` and
 ---
 
 ## Citation
+
+Citation metadata is in [`CITATION.cff`](CITATION.cff); GitHub's **Cite this repository** button exports it as APA or BibTeX.
 
 ```bibtex
 @software{kasaraneni2026clinops,

@@ -34,7 +34,7 @@ print(clipper.report())
 
 ### Built-in bounds
 
-Built-in bounds cover 20 vitals and labs, including:
+Built-in bounds cover 37 variables (12 vitals and 25 labs), including:
 
 | Column | Low | High |
 |---|---|---|
@@ -81,12 +81,17 @@ print(normalizer.report())
 
 ### Registered conversions
 
-30 built-in conversions covering:
+26 built-in conversions (each direction counts once). Run
+`UnitNormalizer.available_conversions()` to list them.
 
-- **Glucose / creatinine / bilirubin / haemoglobin / calcium** — mmol/L ↔ mg/dL
-- **Temperature** — °F ↔ °C
-- **Weight** — lb ↔ kg
-- **Height** — in ↔ cm
+| Measurement | Units |
+|---|---|
+| Glucose, BUN, calcium, phosphate | mg/dL ↔ mmol/L |
+| Creatinine, bilirubin | mg/dL ↔ µmol/L |
+| Haemoglobin | g/dL ↔ mmol/L |
+| Temperature | °C ↔ °F, °C ↔ K |
+| Weight | kg ↔ lb, kg ↔ g |
+| Height | cm ↔ in, cm ↔ m |
 
 ---
 

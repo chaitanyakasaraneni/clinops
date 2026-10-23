@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use clinops in your research, please cite it as below."
+type: software
+title: "clinops: Clinical ML Pipeline Toolkit"
+abstract: >-
+  clinops is a Python library of validated, reusable building blocks for the data
+  engineering steps that precede model training in clinical machine learning:
+  loading MIMIC-III, MIMIC-IV, eICU-CRD, and FHIR R4 data, physiological outlier
+  clipping, unit normalization, ICD-9 to ICD-10 harmonization, gap-aware temporal
+  feature engineering, and leakage-safe patient-level splitting.
+authors:
+  - family-names: Kasaraneni
+    given-names: Chaitanya
+    orcid: "https://orcid.org/0000-0001-5792-1095"
+    affiliation: "Independent Researcher, Chicago, Illinois, USA"
+repository-code: "https://github.com/chaitanyakasaraneni/clinops"
+url: "https://clinops.readthedocs.io"
+license: Apache-2.0
+version: 0.6.0
+date-released: "2026-10-19"
+keywords:
+  - healthcare
+  - clinical machine learning
+  - electronic health records
+  - MIMIC-IV
+  - eICU
+  - FHIR
+  - data preprocessing
+  - time series

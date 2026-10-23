@@ -87,8 +87,8 @@ pre-built schemas, automatic datetime parsing, and convenience flags such as
 
 **`clinops.preprocess`** provides three preprocessing transformers.
 `ClinicalOutlierClipper` applies published physiological bounds [@normal_ranges]
-to clip, null, or flag values that are physiologically implausible, covering 20
-vitals and laboratory measurements. `UnitNormalizer` converts between 30 registered
+to clip, null, or flag values that are physiologically implausible, covering 37
+vitals and laboratory measurements. `UnitNormalizer` converts between 26 registered
 unit pairs (glucose mg/dL ↔ mmol/L, temperature °F ↔ °C, etc.) using either a
 companion unit column or unconditional explicit conversions. `ICDMapper` harmonises
 ICD-9-CM and ICD-10-CM diagnosis codes using the CMS General Equivalence Mappings
