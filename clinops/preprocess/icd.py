@@ -164,14 +164,24 @@ class ICDMapper:
 
     Examples
     --------
-    Map a column of ICD-9 codes to ICD-10:
+    Map individual ICD-9-CM codes to ICD-10-CM:
 
+    >>> import pandas as pd
+    >>> from clinops.preprocess import ICDMapper
     >>> mapper = ICDMapper()
-    >>> df["icd10"] = mapper.map_series(df["icd9_code"])
+    >>> mapper.map_code("4280")
+    'I509'
+    >>> mapper.map_series(pd.Series(["4280", "25000"])).tolist()
+    ['I509', 'E119']
 
-    Map in-place with version detection:
+    Harmonize a mixed-version column, writing ICD-10 codes to a new column:
 
-    >>> df = mapper.harmonize(df, code_col="icd_code", version_col="icd_version")
+    >>> dx = pd.DataFrame({"icd_code": ["4280", "I509"], "icd_version": [9, 10]})
+    >>> mapper.harmonize(dx, code_col="icd_code", version_col="icd_version",
+    ...                  output_col="icd10_code")
+      icd_code  icd_version icd10_code
+    0     4280            9       I509
+    1     I509           10       I509
 
     Get the ICD-10 chapter for a code:
 
@@ -293,13 +303,18 @@ class ICDMapper:
 
         icd9_mask = df[version_col].astype(str) == str(icd9_value)
         n_icd9 = int(icd9_mask.sum())
-        n_icd10 = int((df[version_col].astype(str) == str(icd10_value)).sum())
+        icd10_mask = df[version_col].astype(str) == str(icd10_value)
+        n_icd10 = int(icd10_mask.sum())
 
         logger.info(
             f"ICDMapper.harmonize: {n_icd9:,} ICD-9 rows, {n_icd10:,} ICD-10 rows "
             f"in column '{code_col}'"
         )
 
+        if out_col != code_col:
+            # Writing to a new column: carry existing ICD-10 codes over, so the
+            # output holds a code for every ICD-9 or ICD-10 row, not just ICD-9.
+            df[out_col] = df[code_col].where(icd10_mask)
         if n_icd9 > 0:
             df.loc[icd9_mask, out_col] = self.map_series(df.loc[icd9_mask, code_col]).values
 

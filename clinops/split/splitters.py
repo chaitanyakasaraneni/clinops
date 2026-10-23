@@ -142,18 +142,26 @@ class GroupedPatientSplitter:
 
     Examples
     --------
+    Patient ``P1`` has two ICU stays; both land in the same fold:
+
+    >>> import pandas as pd
+    >>> from clinops.split import GroupedPatientSplitter
+    >>> meta = pd.DataFrame({
+    ...     "uniquepid": ["P1", "P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9"],
+    ...     "patientunitstayid": range(101, 111),
+    ... })
     >>> splitter = GroupedPatientSplitter(
     ...     group_col="uniquepid",
     ...     stay_col="patientunitstayid",
-    ...     val_size=0.15,
-    ...     test_size=0.15,
+    ...     val_size=0.2,
+    ...     test_size=0.2,
     ... )
     >>> result = splitter.split(meta)
-    >>> # no patient appears in more than one fold
+    >>> sum(result.sizes)
+    10
     >>> g = "uniquepid"
-    >>> assert not (set(result.train[g]) & set(result.test[g]))
-    >>> assert not (set(result.train[g]) & set(result.val[g]))
-    >>> assert not (set(result.val[g]) & set(result.test[g]))
+    >>> set(result.train[g]) & set(result.val[g]), set(result.val[g]) & set(result.test[g])
+    (set(), set())
     """
 
     def __init__(
@@ -265,13 +273,24 @@ class TemporalSplitter:
 
     Examples
     --------
-    >>> splitter = TemporalSplitter(cutoff="2155-01-01")
-    >>> result = splitter.split(df)
-    >>> print(result.summary())
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     "subject_id": [p for p in range(1, 11) for _ in range(2)],
+    ...     "charttime": pd.date_range("2150-01-01", periods=20, freq="D"),
+    ...     "hospital_expire_flag": [int(p in (5, 10)) for p in range(1, 11) for _ in range(2)],
+    ... })
+    >>> from clinops.split import TemporalSplitter
+    >>> result = TemporalSplitter(cutoff="2150-01-16").split(df)
+    >>> result.train_size, result.test_size
+    (15, 5)
+    >>> result.train["charttime"].max() < result.test["charttime"].min()
+    True
 
-    >>> # Auto-cutoff at 80% of the time range
-    >>> splitter = TemporalSplitter(train_frac=0.8, time_col="admittime")
-    >>> result = splitter.split(df)
+    Or place the cutoff automatically at 80% of the time range:
+
+    >>> result = TemporalSplitter(train_frac=0.8).split(df)
+    >>> result.train_size, result.test_size
+    (16, 4)
     """
 
     def __init__(
@@ -352,10 +371,18 @@ class PatientSplitter:
 
     Examples
     --------
-    >>> splitter = PatientSplitter(id_col="subject_id", test_size=0.2)
-    >>> result = splitter.split(df)
-    >>> # Verify no patient leakage
-    >>> assert not set(result.train["subject_id"]) & set(result.test["subject_id"])
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     "subject_id": [p for p in range(1, 11) for _ in range(2)],
+    ...     "charttime": pd.date_range("2150-01-01", periods=20, freq="D"),
+    ...     "hospital_expire_flag": [int(p in (5, 10)) for p in range(1, 11) for _ in range(2)],
+    ... })
+    >>> from clinops.split import PatientSplitter
+    >>> result = PatientSplitter(id_col="subject_id", test_size=0.2).split(df)
+    >>> result.train["subject_id"].nunique(), result.test["subject_id"].nunique()
+    (8, 2)
+    >>> set(result.train["subject_id"]) & set(result.test["subject_id"])  # no patient leakage
+    set()
     """
 
     def __init__(
@@ -454,13 +481,23 @@ class StratifiedPatientSplitter:
 
     Examples
     --------
-    >>> splitter = StratifiedPatientSplitter(
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     "subject_id": [p for p in range(1, 11) for _ in range(2)],
+    ...     "charttime": pd.date_range("2150-01-01", periods=20, freq="D"),
+    ...     "hospital_expire_flag": [int(p in (5, 10)) for p in range(1, 11) for _ in range(2)],
+    ... })
+    >>> from clinops.split import StratifiedPatientSplitter
+    >>> result = StratifiedPatientSplitter(
     ...     id_col="subject_id",
     ...     outcome_col="hospital_expire_flag",
     ...     test_size=0.2,
-    ... )
-    >>> result = splitter.split(df)
-    >>> print(result.summary())
+    ... ).split(df)
+    >>> set(result.train["subject_id"]) & set(result.test["subject_id"])
+    set()
+    >>> outcome = "hospital_expire_flag"
+    >>> bool(result.train[outcome].any()), bool(result.test[outcome].any())
+    (True, True)
     """
 
     def __init__(

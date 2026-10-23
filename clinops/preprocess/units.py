@@ -136,17 +136,26 @@ class UnitNormalizer:
 
     Examples
     --------
-    Normalize a glucose column that is mixed mg/dL and mmol/L:
+    Normalize a glucose column that mixes mg/dL and mmol/L:
 
+    >>> import pandas as pd
+    >>> from clinops.preprocess import UNIT_CONVERSIONS, UnitNormalizer
+    >>> df = pd.DataFrame({"glucose": [126.0, 7.0], "glucose_unit": ["mg/dL", "mmol/L"]})
     >>> normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
-    >>> df = normalizer.transform(df)
+    >>> normalizer.transform(df).round(1)
+       glucose glucose_unit
+    0    126.0        mg/dL
+    1    126.1        mg/dL
 
     Convert all temperatures from °F to °C unconditionally:
 
     >>> normalizer = UnitNormalizer(
     ...     explicit_conversions={"temperature": UNIT_CONVERSIONS["temperature__f__c"]}
     ... )
-    >>> df = normalizer.transform(df)
+    >>> normalizer.transform(pd.DataFrame({"temperature": [98.6, 101.3]})).round(1)
+       temperature
+    0         37.0
+    1         38.5
     """
 
     def __init__(

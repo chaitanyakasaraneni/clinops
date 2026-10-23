@@ -224,14 +224,29 @@ class DistributionDriftDetector:
 
     Examples
     --------
-    >>> detector = DistributionDriftDetector()
-    >>> detector.fit(train_df)
-    >>> report = detector.detect(production_batch_df)
-    >>> print(report.summary())
-    >>> print(report.to_dataframe())
+    Fit on reference (training) data, then check a new batch in which mean
+    heart rate has shifted:
 
-    >>> # Only alert on high-severity drift
-    >>> drifted = report.drifted_columns(DriftSeverity.HIGH)
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> from clinops.monitor import DistributionDriftDetector, DriftSeverity
+    >>> rng = np.random.default_rng(0)
+    >>> train_df = pd.DataFrame(
+    ...     {"heart_rate": rng.normal(80, 10, 500), "spo2": rng.normal(97, 1, 500)}
+    ... )
+    >>> batch_df = pd.DataFrame(
+    ...     {"heart_rate": rng.normal(95, 10, 500), "spo2": rng.normal(97, 1, 500)}
+    ... )
+    >>> detector = DistributionDriftDetector().fit(train_df)
+    >>> report = detector.detect(batch_df)
+    >>> report.drifted_columns(DriftSeverity.HIGH)
+    ['heart_rate']
+    >>> print(report.summary())  # doctest: +NORMALIZE_WHITESPACE
+    Columns checked : 2
+    HIGH drift      : 1
+    MEDIUM drift    : 0
+    LOW drift       : 1
+    HIGH columns    : heart_rate
     """
 
     def __init__(

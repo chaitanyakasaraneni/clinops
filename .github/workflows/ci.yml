@@ -42,6 +42,12 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v --cov=clinops --cov-report=xml
 
+      # Every runnable docstring example must produce the output it shows.
+      # Examples that need MIMIC/eICU/FHIR files or cloud credentials are
+      # marked "# doctest: +SKIP".
+      - name: Run docstring examples
+        run: pytest --doctest-modules clinops --no-cov -o testpaths=
+
       - name: Upload coverage to Codecov
         if: matrix.pandas == 'pandas>=3,<4'
         uses: codecov/codecov-action@v4

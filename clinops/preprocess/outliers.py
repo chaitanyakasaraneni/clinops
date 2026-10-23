@@ -126,9 +126,23 @@ class ClinicalOutlierClipper:
 
     Examples
     --------
-    >>> clipper = ClinicalOutlierClipper()
-    >>> clean_df = clipper.fit_transform(vitals_df)
-    >>> print(clipper.report())
+    A heart rate of 400 bpm and an SpO2 of 30% are physiologically implausible:
+
+    >>> import pandas as pd
+    >>> from clinops.preprocess import ClinicalOutlierClipper
+    >>> vitals_df = pd.DataFrame({"heart_rate": [72.0, 400.0], "spo2": [97.0, 30.0]})
+    >>> clipper = ClinicalOutlierClipper()  # action="clip" by default
+    >>> clipper.fit_transform(vitals_df).to_dict("list")
+    {'heart_rate': [72.0, 300.0], 'spo2': [97.0, 50.0]}
+    >>> clipper.report()[["column", "low_outliers", "high_outliers"]]
+           column  low_outliers  high_outliers
+    0  heart_rate             0              1
+    1        spo2             1              0
+
+    Set implausible values to NaN instead of clipping them:
+
+    >>> ClinicalOutlierClipper(action="null").fit_transform(vitals_df).to_dict("list")
+    {'heart_rate': [72.0, nan], 'spo2': [97.0, nan]}
     """
 
     def __init__(

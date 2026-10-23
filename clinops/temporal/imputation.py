@@ -92,6 +92,35 @@ class Imputer:
         Patient identifier column. FORWARD_FILL, BACKWARD_FILL, and LINEAR
         are applied within each patient when set. Without it, the whole
         DataFrame is treated as one series, so set it on multi-patient data.
+
+    Examples
+    --------
+    Fit per-patient means on the training split and apply them to the test
+    split. Patient 3 was not in training, so it gets the training-set mean:
+
+    >>> import numpy as np
+    >>> import pandas as pd
+    >>> from clinops.temporal import ImputationStrategy, Imputer
+    >>> train = pd.DataFrame({"subject_id": [1, 1, 2, 2], "heart_rate": [60.0, 80.0, 100.0, 100.0]})
+    >>> test = pd.DataFrame({"subject_id": [1, 3], "heart_rate": [np.nan, np.nan]})
+    >>> imputer = Imputer(ImputationStrategy.MEAN, per_patient=True, id_col="subject_id")
+    >>> imputer.fit(train).transform(test)["heart_rate"].tolist()
+    [70.0, 85.0]
+
+    Forward fill within each patient, but never across a gap longer than 2 hours:
+
+    >>> df = pd.DataFrame({
+    ...     "subject_id": 1,
+    ...     "charttime": pd.date_range("2150-01-01", periods=5, freq="h"),
+    ...     "lactate": [4.0, np.nan, np.nan, np.nan, np.nan],
+    ... })
+    >>> Imputer(
+    ...     ImputationStrategy.FORWARD_FILL,
+    ...     max_gap_hours=2,
+    ...     time_col="charttime",
+    ...     id_col="subject_id",
+    ... ).transform(df)["lactate"].tolist()
+    [4.0, 4.0, 4.0, nan, nan]
     """
 
     def __init__(

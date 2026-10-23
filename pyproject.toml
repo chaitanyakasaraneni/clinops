@@ -82,6 +82,8 @@ disallow_untyped_calls = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts   = "--cov=clinops --cov-report=term-missing --cov-report=xml"
+# Docstring examples are run with `pytest --doctest-modules clinops` (see CI).
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]
 
 [tool.coverage.run]
 source = ["clinops"]

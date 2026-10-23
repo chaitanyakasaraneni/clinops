@@ -139,21 +139,30 @@ class StepFunctionsPipeline:
 
     Examples
     --------
+    Build and inspect the state machine locally; no AWS calls are made until
+    ``deploy``:
+
+    >>> from clinops.orchestrate import PipelineStep, StepFunctionsPipeline
     >>> pipeline = StepFunctionsPipeline(
     ...     name="clinops-daily-ingest",
-    ...     role_arn="arn:aws:iam::123456789:role/StepFunctionsRole",
+    ...     role_arn="arn:aws:iam::123456789012:role/StepFunctionsRole",
     ... )
-    >>> pipeline.add_step(PipelineStep(
+    >>> _ = pipeline.add_step(PipelineStep(  # add_step returns the pipeline for chaining
     ...     name="Ingest",
-    ...     resource="arn:aws:lambda:us-east-1:123456789:function:clinops-ingest",
+    ...     resource="arn:aws:lambda:us-east-1:123456789012:function:clinops-ingest",
     ... ))
-    >>> pipeline.add_step(PipelineStep(
+    >>> _ = pipeline.add_step(PipelineStep(
     ...     name="Preprocess",
-    ...     resource="arn:aws:lambda:us-east-1:123456789:function:clinops-preprocess",
+    ...     resource="arn:aws:lambda:us-east-1:123456789012:function:clinops-preprocess",
     ... ))
-    >>> print(pipeline.definition_json())   # inspect before deploying
-    >>> arn = pipeline.deploy()
-    >>> execution_arn = pipeline.execute({"date": "2024-01-01"})
+    >>> definition = pipeline.definition()
+    >>> definition["StartAt"], list(definition["States"])
+    ('Ingest', ['Ingest', 'Preprocess'])
+
+    Deploying and executing require AWS credentials:
+
+    >>> arn = pipeline.deploy()  # doctest: +SKIP
+    >>> execution_arn = pipeline.execute({"date": "2024-01-01"})  # doctest: +SKIP
     """
 
     def __init__(

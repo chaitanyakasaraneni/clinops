@@ -34,9 +34,9 @@ class FHIRLoader:
 
     Examples
     --------
-    >>> loader = FHIRLoader("/data/fhir_export")
-    >>> observations = loader.observations()
-    >>> patients     = loader.patients()
+    >>> loader = FHIRLoader("/data/fhir_export")  # doctest: +SKIP
+    >>> observations = loader.observations()  # doctest: +SKIP
+    >>> patients     = loader.patients()  # doctest: +SKIP
     """
 
     def __init__(self, source: str | Path) -> None:

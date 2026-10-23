@@ -40,9 +40,9 @@ class FlatFileLoader:
 
     Examples
     --------
-    >>> loader = FlatFileLoader("vitals_export.csv", id_col="patient_id")
-    >>> df = loader.load()
-    >>> print(loader.summary())
+    >>> loader = FlatFileLoader("vitals_export.csv", id_col="patient_id")  # doctest: +SKIP
+    >>> df = loader.load()  # doctest: +SKIP
+    >>> print(loader.summary())  # doctest: +SKIP
     """
 
     def __init__(
