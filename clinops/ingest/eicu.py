@@ -559,9 +559,10 @@ class EicuCohortConfig(BaseModel):
     """
     Cohort-selection and windowing configuration for :class:`EicuTableLoader`.
 
-    Defaults mirror the ICHI 2026 study design.
+    Defaults mirror the ICHI 2026 study design. All fields are keyword
+    arguments to the constructor.
 
-    Parameters
+    Attributes
     ----------
     min_age:
         Minimum age in years (adults). Default 18.

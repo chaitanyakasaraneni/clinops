@@ -32,6 +32,12 @@ theme:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      # Notebooks are executed on every docs build, so rendered outputs always
+      # match the current code and a broken tutorial fails the build.
+      execute: true
+      allow_errors: false
+      include_source: true
   - mkdocstrings:
       handlers:
         python:
@@ -61,6 +67,10 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Tutorials:
+      - Overview: examples.md
+      - 01 Getting started: tutorials/01_getting_started.ipynb
+      - 02 ICU mortality pipeline: tutorials/02_icu_mortality_pipeline.ipynb
   - User Guide:
       - Ingest: guide/ingest.md
       - Preprocess: guide/preprocess.md

@@ -43,6 +43,7 @@ dev  = [
     "ruff==0.15.2", "mypy==1.19.1", "pandas-stubs==3.0.5.260914",
     "pydantic>=2.5",
     "mkdocs>=1.5", "mkdocs-material>=9.5", "mkdocstrings[python]>=0.24",
+    "mkdocs-jupyter>=0.25",
     "pre-commit>=3.7",
 ]
 

@@ -7,7 +7,11 @@ All examples use **synthetic data** and run without MIMIC-IV access. Swap in a r
 
 ## Jupyter notebooks
 
-### [01 — Getting started](../examples/notebooks/01_getting_started.ipynb)
+The notebooks are rendered with their outputs on this site, and executed on every
+docs build so the outputs match the current release. The source files live in
+[`examples/notebooks/`](https://github.com/chaitanyakasaraneni/clinops/tree/main/examples/notebooks).
+
+### [01: Getting started](tutorials/01_getting_started.ipynb)
 
 A module-by-module walkthrough that demonstrates every `clinops` component in
 isolation. Good starting point if you are new to the library.
@@ -27,7 +31,7 @@ Topics covered:
 
 ---
 
-### [02 — ICU mortality prediction pipeline](../examples/notebooks/02_icu_mortality_pipeline.ipynb)
+### [02: ICU mortality prediction pipeline](tutorials/02_icu_mortality_pipeline.ipynb)
 
 An end-to-end pipeline that takes raw (synthetic) MIMIC-IV-style tables and produces
 ML-ready `X_train / y_train / X_test / y_test` arrays for a 48-hour ICU mortality
@@ -54,7 +58,7 @@ raw EHR data
 
 ## Script example
 
-### [e2e_example.py](../examples/e2e_example.py)
+### [e2e_example.py](https://github.com/chaitanyakasaraneni/clinops/blob/main/examples/e2e_example.py)
 
 A single runnable Python script that exercises the core pipeline end to end. Useful for
 quick smoke-testing after installation.
