@@ -30,8 +30,21 @@ class LagFeatureBuilder:
 
     Examples
     --------
-    >>> builder = LagFeatureBuilder(lags=[1, 2], rolling_windows=[4])
-    >>> enriched = builder.fit_transform(windows_df, id_col="subject_id")
+    >>> import pandas as pd
+    >>> from clinops.temporal import LagFeatureBuilder
+    >>> windows_df = pd.DataFrame({
+    ...     "subject_id": [1, 1, 1, 1],
+    ...     "window_start": pd.date_range("2150-01-01", periods=4, freq="6h"),
+    ...     "heart_rate": [80.0, 85.0, 90.0, 95.0],
+    ... })
+    >>> builder = LagFeatureBuilder(lags=[1], rolling_windows=[2], feature_cols=["heart_rate"])
+    >>> enriched = builder.fit_transform(windows_df)
+    >>> enriched[["heart_rate", "heart_rate_lag1", "heart_rate_roll2_mean"]]
+       heart_rate  heart_rate_lag1  heart_rate_roll2_mean
+    0        80.0              NaN                   80.0
+    1        85.0             80.0                   82.5
+    2        90.0             85.0                   87.5
+    3        95.0             90.0                   92.5
     """
 
     def __init__(
@@ -103,8 +116,24 @@ class CohortAligner:
 
     Examples
     --------
+    Keep only events in the 48 hours after ICU admission:
+
+    >>> import pandas as pd
+    >>> from clinops.temporal import CohortAligner
+    >>> chartevents = pd.DataFrame({
+    ...     "subject_id": [1, 1, 1],
+    ...     "charttime": pd.to_datetime(
+    ...         ["2150-01-01 06:00", "2150-01-01 20:00", "2150-01-04 08:00"]
+    ...     ),
+    ...     "heart_rate": [88.0, 92.0, 75.0],
+    ... })
+    >>> stays = pd.DataFrame(
+    ...     {"subject_id": [1], "icu_intime": pd.to_datetime(["2150-01-01 08:00"])}
+    ... )
     >>> aligner = CohortAligner(anchor_col="icu_intime", max_hours_after=48)
-    >>> aligned = aligner.align(chartevents, admissions)
+    >>> aligner.align(chartevents, stays)
+       subject_id           charttime  heart_rate  hours_from_anchor
+    0           1 2150-01-01 20:00:00        92.0               12.0
     """
 
     def __init__(

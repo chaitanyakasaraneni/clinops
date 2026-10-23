@@ -322,6 +322,17 @@ class TestICDMapper:
         # ICD-10 row 3: "I10" should be unchanged
         assert result.loc[3, "icd_code"] == "I10"
 
+    def test_harmonize_output_col_keeps_icd10_rows(self, icd_df):
+        # With output_col, ICD-10 rows used to be left NaN in the new column.
+        mapper = ICDMapper()
+        result = mapper.harmonize(
+            icd_df, code_col="icd_code", version_col="icd_version", output_col="icd10"
+        )
+        assert result.loc[0, "icd10"] == "I2510"  # mapped from ICD-9
+        assert result.loc[3, "icd10"] == "I10"  # already ICD-10, carried over
+        assert result.loc[3, "icd_code"] == "I10"  # source column untouched
+        assert result.loc[0, "icd_code"] == "41401"
+
     def test_harmonize_preserves_original_df(self, icd_df):
         mapper = ICDMapper()
         mapper.harmonize(icd_df, code_col="icd_code", version_col="icd_version")

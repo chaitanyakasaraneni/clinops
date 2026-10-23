@@ -60,16 +60,20 @@ class ClinicalSchema:
         If True (default), columns not in the spec are allowed. If False,
         any column not listed in ``columns`` is a violation.
 
-    Example
-    -------
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from clinops.ingest import ClinicalSchema, ColumnSpec
     >>> schema = ClinicalSchema(
     ...     name="vitals",
     ...     columns=[
     ...         ColumnSpec("subject_id", dtype="int64", nullable=False),
     ...         ColumnSpec("heart_rate", dtype="float64", min_value=0, max_value=300),
-    ...     ]
+    ...     ],
     ... )
-    >>> schema.validate(df)
+    >>> df = pd.DataFrame({"subject_id": [1, 2], "heart_rate": [72.0, 350.0]})
+    >>> schema.validate(df, strict=False)
+    ["[vitals] Column 'heart_rate' has 1 values above max_value=300"]
     """
 
     name: str

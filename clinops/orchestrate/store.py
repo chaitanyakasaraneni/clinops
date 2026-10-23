@@ -58,11 +58,11 @@ class GCSPipelineStore:
 
     Examples
     --------
-    >>> store = GCSPipelineStore("my-clinical-bucket", prefix="clinops/prod")
-    >>> store.upload(windows_df, "features/windows_2024_01")
+    >>> store = GCSPipelineStore("my-clinical-bucket", prefix="clinops/prod")  # doctest: +SKIP
+    >>> store.upload(windows_df, "features/windows_2024_01")  # doctest: +SKIP
     'gs://my-clinical-bucket/clinops/prod/features/windows_2024_01.parquet'
 
-    >>> df = store.download("features/windows_2024_01")
+    >>> df = store.download("features/windows_2024_01")  # doctest: +SKIP
     """
 
     def __init__(
@@ -228,11 +228,11 @@ class S3PipelineStore:
 
     Examples
     --------
-    >>> store = S3PipelineStore("my-clinical-bucket", prefix="clinops/prod")
-    >>> store.upload(windows_df, "features/windows_2024_01")
+    >>> store = S3PipelineStore("my-clinical-bucket", prefix="clinops/prod")  # doctest: +SKIP
+    >>> store.upload(windows_df, "features/windows_2024_01")  # doctest: +SKIP
     's3://my-clinical-bucket/clinops/prod/features/windows_2024_01.parquet'
 
-    >>> df = store.download("features/windows_2024_01")
+    >>> df = store.download("features/windows_2024_01")  # doctest: +SKIP
     """
 
     def __init__(

@@ -6,10 +6,10 @@ modules. Validates column presence, dtypes, and value ranges on load.
 
 Example
 -------
->>> from clinops.ingest import MimicLoader
->>> loader = MimicLoader("/data/mimic-iv-2.2")
->>> charts = loader.chartevents(subject_ids=[10000032, 10000980])
->>> labs   = loader.labevents(subject_ids=[10000032, 10000980])
+>>> from clinops.ingest import MimicLoader  # doctest: +SKIP
+>>> loader = MimicLoader("/data/mimic-iv-2.2")  # doctest: +SKIP
+>>> charts = loader.chartevents(subject_ids=[10000032, 10000980])  # doctest: +SKIP
+>>> labs   = loader.labevents(subject_ids=[10000032, 10000980])  # doctest: +SKIP
 """
 
 from __future__ import annotations
@@ -105,9 +105,9 @@ class MimicLoader:
 
     Examples
     --------
-    >>> loader = MimicLoader("/data/mimic-iv-2.2")
-    >>> charts = loader.chartevents(subject_ids=[10000032])
-    >>> labs   = loader.labevents(hadm_ids=[20000019])
+    >>> loader = MimicLoader("/data/mimic-iv-2.2")  # doctest: +SKIP
+    >>> charts = loader.chartevents(subject_ids=[10000032])  # doctest: +SKIP
+    >>> labs   = loader.labevents(hadm_ids=[20000019])  # doctest: +SKIP
     """
 
     def __init__(

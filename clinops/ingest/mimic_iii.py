@@ -30,13 +30,13 @@ Supported tables
 
 Examples
 --------
->>> from clinops.ingest import MimicIIILoader
+>>> from clinops.ingest import MimicIIILoader  # doctest: +SKIP
 >>>
->>> loader = MimicIIILoader("/data/mimic-iii-clinical-database-1.4")
+>>> loader = MimicIIILoader("/data/mimic-iii-clinical-database-1.4")  # doctest: +SKIP
 >>>
->>> charts = loader.chartevents(subject_ids=[40124, 41914])
->>> labs   = loader.labevents(subject_ids=[40124], with_ref_range=True)
->>> dx     = loader.diagnoses_icd(subject_ids=[40124], primary_only=True)
+>>> charts = loader.chartevents(subject_ids=[40124, 41914])  # doctest: +SKIP
+>>> labs   = loader.labevents(subject_ids=[40124], with_ref_range=True)  # doctest: +SKIP
+>>> dx     = loader.diagnoses_icd(subject_ids=[40124], primary_only=True)  # doctest: +SKIP
 
 Authors
 -------
@@ -180,10 +180,10 @@ class MimicIIILoader:
 
     Examples
     --------
-    >>> loader = MimicIIILoader("/data/mimic-iii-clinical-database-1.4")
-    >>> charts = loader.chartevents(subject_ids=[40124])
-    >>> labs   = loader.labevents(hadm_ids=[198765])
-    >>> dx     = loader.diagnoses_icd(subject_ids=[40124], primary_only=True)
+    >>> loader = MimicIIILoader("/data/mimic-iii-clinical-database-1.4")  # doctest: +SKIP
+    >>> charts = loader.chartevents(subject_ids=[40124])  # doctest: +SKIP
+    >>> labs   = loader.labevents(hadm_ids=[198765])  # doctest: +SKIP
+    >>> dx     = loader.diagnoses_icd(subject_ids=[40124], primary_only=True)  # doctest: +SKIP
     """
 
     def __init__(

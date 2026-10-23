@@ -92,15 +92,26 @@ class TemporalWindower:
 
     Examples
     --------
-    >>> windower = TemporalWindower(window_hours=24, step_hours=6)
-    >>> windows = windower.fit_transform(
+    Twelve hourly observations become two 6-hour windows:
+
+    >>> import pandas as pd
+    >>> from clinops.temporal import TemporalWindower
+    >>> chartevents = pd.DataFrame({
+    ...     "subject_id": 1,
+    ...     "charttime": pd.date_range("2150-01-01", periods=12, freq="h"),
+    ...     "heart_rate": [80.0 + i for i in range(12)],
+    ...     "spo2": 97.0,
+    ... })
+    >>> windower = TemporalWindower(window_hours=6, step_hours=6)
+    >>> windower.fit_transform(
     ...     df=chartevents,
     ...     id_col="subject_id",
     ...     time_col="charttime",
-    ...     feature_cols=["heart_rate", "spo2", "resp_rate", "map"],
+    ...     feature_cols=["heart_rate", "spo2"],
     ... )
-    >>> windows.shape
-    (4820, 6)   # (n_windows, n_features + id + window_start)
+       subject_id        window_start          window_end  heart_rate  spo2
+    0           1 2150-01-01 00:00:00 2150-01-01 06:00:00        82.5  97.0
+    1           1 2150-01-01 06:00:00 2150-01-01 12:00:00        88.5  97.0
     """
 
     def __init__(

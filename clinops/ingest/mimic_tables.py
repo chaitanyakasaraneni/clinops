@@ -16,19 +16,19 @@ Supported tables
 
 Example
 -------
->>> from clinops.ingest import MimicTableLoader
+>>> from clinops.ingest import MimicTableLoader  # doctest: +SKIP
 >>>
->>> tbl = MimicTableLoader("/data/mimic-iv-2.2")
+>>> tbl = MimicTableLoader("/data/mimic-iv-2.2")  # doctest: +SKIP
 >>>
 >>> # Vitals for two patients — no schema definition needed
->>> charts = tbl.chartevents(subject_ids=[10000032, 10000980])
+>>> charts = tbl.chartevents(subject_ids=[10000032, 10000980])  # doctest: +SKIP
 >>>
 >>> # Lab results joined with reference ranges
->>> labs = tbl.labevents(subject_ids=[10000032], with_ref_range=True)
+>>> labs = tbl.labevents(subject_ids=[10000032], with_ref_range=True)  # doctest: +SKIP
 >>>
 >>> # Diagnoses with ICD version already labelled
->>> dx = tbl.diagnoses_icd(subject_ids=[10000032])
->>> print(dx.dtypes)
+>>> dx = tbl.diagnoses_icd(subject_ids=[10000032])  # doctest: +SKIP
+>>> print(dx.dtypes)  # doctest: +SKIP
 """
 
 from __future__ import annotations
@@ -170,10 +170,10 @@ class MimicTableLoader:
 
     Examples
     --------
-    >>> tbl = MimicTableLoader("/data/mimic-iv-2.2")
-    >>> charts = tbl.chartevents(subject_ids=[10000032, 10000980])
-    >>> dx      = tbl.diagnoses_icd(subject_ids=[10000032], primary_only=True)
-    >>> stays   = tbl.icustays(subject_ids=[10000032], with_los_band=True)
+    >>> tbl = MimicTableLoader("/data/mimic-iv-2.2")  # doctest: +SKIP
+    >>> charts = tbl.chartevents(subject_ids=[10000032, 10000980])  # doctest: +SKIP
+    >>> dx      = tbl.diagnoses_icd(subject_ids=[10000032], primary_only=True)  # doctest: +SKIP
+    >>> stays   = tbl.icustays(subject_ids=[10000032], with_los_band=True)  # doctest: +SKIP
     """
 
     def __init__(

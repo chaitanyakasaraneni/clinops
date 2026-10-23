@@ -182,9 +182,9 @@ class EicuLoader:
 
     Examples
     --------
-    >>> loader = EicuLoader("/data/eicu-crd")
-    >>> pt = loader.load_patient()
-    >>> vitals = loader.load_vital_periodic(patient_unit_stay_ids=[141168])
+    >>> loader = EicuLoader("/data/eicu-crd")  # doctest: +SKIP
+    >>> pt = loader.load_patient()  # doctest: +SKIP
+    >>> vitals = loader.load_vital_periodic(patient_unit_stay_ids=[141168])  # doctest: +SKIP
     """
 
     def __init__(
@@ -681,9 +681,9 @@ class EicuTableLoader:
 
     Examples
     --------
-    >>> loader = EicuTableLoader("/data/eicu-crd")
-    >>> X, y = loader.build_sequences(observation_hours=24, prediction_hours=6)
-    >>> meta = loader.build_cohort()[
+    >>> loader = EicuTableLoader("/data/eicu-crd")  # doctest: +SKIP
+    >>> X, y = loader.build_sequences(observation_hours=24, prediction_hours=6)  # doctest: +SKIP
+    >>> meta = loader.build_cohort()[  # doctest: +SKIP
     ...     ["uniquepid", "patientunitstayid", "unittype", "age", "gender"]
     ... ]
     """

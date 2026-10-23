@@ -136,15 +136,36 @@ class DataQualityChecker:
 
     Examples
     --------
-    >>> checker = DataQualityChecker(required_columns=["subject_id", "charttime"])
-    >>> checker.fit(train_df)          # learn reference schema and row count
-    >>> report = checker.check(df)
-    >>> print(report.summary())
-    >>> if not report.passed:
-    ...     raise RuntimeError("Data quality check failed")
+    Learn the reference schema from training data, then check a batch that is
+    missing a required column:
 
-    >>> # Standalone (no reference schema)
-    >>> report = DataQualityChecker(max_null_rate=0.3).check(df)
+    >>> import pandas as pd
+    >>> from clinops.monitor import DataQualityChecker
+    >>> train_df = pd.DataFrame({
+    ...     "subject_id": [1, 2, 3],
+    ...     "charttime": pd.date_range("2150-01-01", periods=3, freq="h"),
+    ...     "heart_rate": [80.0, 82.0, 85.0],
+    ... })
+    >>> checker = DataQualityChecker(required_columns=["subject_id", "charttime"])
+    >>> report = checker.fit(train_df).check(train_df.drop(columns=["charttime"]))
+    >>> report.passed
+    False
+    >>> print(report.summary())  # doctest: +NORMALIZE_WHITESPACE
+    Rows     : 3
+    Columns  : 2
+    Errors   : 2
+    Warnings : 0
+    Passed   : False
+      [ERROR]  Required column 'charttime' is missing from DataFrame
+      [ERROR]  Column 'charttime' present in reference but missing from current
+
+    Without a reference, high null rates are reported as warnings:
+
+    >>> report = DataQualityChecker(max_null_rate=0.3).check(
+    ...     pd.DataFrame({"heart_rate": [80.0, None, None]})
+    ... )
+    >>> report.passed, len(report.warnings)
+    (True, 1)
     """
 
     def __init__(
