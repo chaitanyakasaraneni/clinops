@@ -7,6 +7,7 @@ and time-series feature engineering for healthcare AI research.
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Tests](https://github.com/chaitanyakasaraneni/clinops/actions/workflows/ci.yml/badge.svg)](https://github.com/chaitanyakasaraneni/clinops/actions)
+[![Coverage](https://codecov.io/gh/chaitanyakasaraneni/clinops/branch/main/graph/badge.svg)](https://codecov.io/gh/chaitanyakasaraneni/clinops)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Documentation](https://readthedocs.org/projects/clinops/badge/?version=latest)](https://clinops.readthedocs.io/)
 
