@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Literal
 
 import pandas as pd
 
@@ -38,8 +39,15 @@ class QualityIssue:
     """
 
     column: str
-    issue_type: str
-    severity: str
+    issue_type: Literal[
+        "high_null_rate",
+        "all_null",
+        "column_added",
+        "column_removed",
+        "dtype_changed",
+        "row_count_anomaly",
+    ]
+    severity: Literal["error", "warning"]
     detail: str
 
 
