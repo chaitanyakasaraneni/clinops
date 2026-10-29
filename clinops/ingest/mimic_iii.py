@@ -53,6 +53,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel, field_validator
@@ -423,7 +424,7 @@ class MimicIIILoader:
         subject_ids: Sequence[int] | None = None,
         hadm_ids: Sequence[int] | None = None,
         icustay_ids: Sequence[int] | None = None,
-        source: str = "mv",
+        source: Literal["mv", "cv", "both"] = "mv",
     ) -> pd.DataFrame:
         """
         Load ICU fluid input events.

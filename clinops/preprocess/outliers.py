@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -148,7 +148,7 @@ class ClinicalOutlierClipper:
     def __init__(
         self,
         bounds: dict[str, BoundSpec] | None = None,
-        action: str = "clip",
+        action: Literal["clip", "null", "flag"] = "clip",
         extra_bounds: dict[str, BoundSpec] | None = None,
         strict: bool = False,
     ) -> None:

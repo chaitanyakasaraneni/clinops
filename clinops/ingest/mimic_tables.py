@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
@@ -179,7 +180,7 @@ class MimicTableLoader:
     def __init__(
         self,
         mimic_path: str | Path,
-        version: str = "auto",
+        version: Literal["2.2", "2.1", "2.0", "auto"] = "auto",
         strict_validation: bool = True,
         chunk_size: int | None = None,
     ) -> None:
