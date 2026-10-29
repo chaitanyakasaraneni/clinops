@@ -112,10 +112,7 @@ class ClinicalSchema:
 
         for spec in self.columns:
             if spec.name not in df.columns:
-                msg = f"[{self.name}] Missing required column: '{spec.name}'"
-                violations.append(msg)
-                if strict:
-                    raise SchemaValidationError(msg)
+                report(f"[{self.name}] Missing required column: '{spec.name}'")
                 continue
 
             col = df[spec.name]
@@ -123,13 +120,10 @@ class ClinicalSchema:
             # Nullability check
             if not spec.nullable and col.isna().any():
                 null_count = col.isna().sum()
-                msg = (
+                report(
                     f"[{self.name}] Column '{spec.name}' has "
                     f"{null_count} null values (nullable=False)"
                 )
-                violations.append(msg)
-                if strict:
-                    raise SchemaValidationError(msg)
 
             # Dtype check
             if spec.dtype is not None and not _dtype_matches(col, spec.dtype):
@@ -149,37 +143,28 @@ class ClinicalSchema:
             if spec.min_value is not None and pd.api.types.is_numeric_dtype(col):
                 out_of_range = (col < spec.min_value).sum()
                 if out_of_range:
-                    msg = (
+                    report(
                         f"[{self.name}] Column '{spec.name}' has {out_of_range} values "
                         f"below min_value={spec.min_value}"
                     )
-                    violations.append(msg)
-                    if strict:
-                        raise SchemaValidationError(msg)
 
             if spec.max_value is not None and pd.api.types.is_numeric_dtype(col):
                 out_of_range = (col > spec.max_value).sum()
                 if out_of_range:
-                    msg = (
+                    report(
                         f"[{self.name}] Column '{spec.name}' has {out_of_range} values "
                         f"above max_value={spec.max_value}"
                     )
-                    violations.append(msg)
-                    if strict:
-                        raise SchemaValidationError(msg)
 
             # Allowed values check
             if spec.allowed_values:
                 invalid = ~col.isin(spec.allowed_values)
                 invalid_count = invalid.sum()
                 if invalid_count:
-                    msg = (
+                    report(
                         f"[{self.name}] Column '{spec.name}' has {invalid_count} values "
                         f"not in allowed_values={spec.allowed_values}"
                     )
-                    violations.append(msg)
-                    if strict:
-                        raise SchemaValidationError(msg)
 
         return violations
 
