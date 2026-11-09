@@ -21,6 +21,19 @@ feedback.
 - `PatientSplitter` raises `RuntimeError` if a patient ends up in both splits,
   like `GroupedPatientSplitter`, instead of only logging an error.
   ([#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
+- `CohortAligner.align()` raised an opaque pandas `InvalidIndexError` when
+  `anchor_df` had more than one row per id, as with readmitted patients. It now
+  raises a `ValueError` explaining how to align per stay (`id_col="stay_id"`) or
+  keep one stay per patient. Missing columns raise a clear error, and events
+  with no anchor are logged as dropped.
+  ([pyOpenSci review](https://github.com/pyOpenSci/software-submission/issues/362#issuecomment-6540182036))
+
+### Documentation
+
+- The getting-started walkthrough runs as written: it pivots `chartevents` to one
+  column per vital before clipping, aligns each ICU stay to its own admission,
+  windows per stay, attaches the outcome per admission, and splits by patient.
+  CI executes it on a synthetic MIMIC-IV copy with readmitted patients.
 
 ## 0.6.1
 

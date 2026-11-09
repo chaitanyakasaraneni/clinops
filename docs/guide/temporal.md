@@ -142,11 +142,21 @@ from clinops.temporal import CohortAligner
 
 aligned = CohortAligner(
     anchor_col="intime",
+    id_col="stay_id",
     max_hours_before=0,
     max_hours_after=48,
-).align(events_df=charts, anchor_df=stays)
-# Returns charts filtered to 48 hours post-admission,
+).align(events_df=vitals, anchor_df=stays[["stay_id", "intime"]])
+# Returns vitals filtered to 48 hours after each stay's admission,
 # with an additional hours_from_anchor column
 ```
+
+`anchor_df` must have exactly one row per `id_col` value; otherwise `align()` raises a `ValueError`. MIMIC-IV patients can have several ICU stays, so either align per stay as above (both `chartevents` and `icustays` carry `stay_id`), or keep one stay per patient and align on `subject_id`:
+
+```python
+first_stays = stays.sort_values("intime").drop_duplicates("subject_id")
+aligned = CohortAligner(anchor_col="intime", id_col="subject_id").align(vitals, first_stays)
+```
+
+Events whose id has no anchor are dropped, and the number dropped is logged.
 
 Useful for building mortality-prediction cohorts (48-hour ICU window), early-warning datasets, and any study with a defined index event.

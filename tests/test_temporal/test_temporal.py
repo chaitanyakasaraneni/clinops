@@ -912,3 +912,62 @@ class TestCohortAligner:
         assert "hours_from_anchor" in aligned.columns
         assert aligned["hours_from_anchor"].min() >= -4
         assert aligned["hours_from_anchor"].max() <= 24
+
+
+class TestCohortAlignerAnchors:
+    """One anchor per id (pyOpenSci review: getting-started example with readmissions)."""
+
+    def _events(self):
+        return pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2],
+                "stay_id": [10, 11, 20],
+                "charttime": pd.to_datetime(
+                    ["2150-01-01 09:00", "2150-06-01 10:00", "2150-02-01 12:00"]
+                ),
+                "heart_rate": [80.0, 95.0, 70.0],
+            }
+        )
+
+    def _stays(self):
+        return pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2],
+                "stay_id": [10, 11, 20],
+                "intime": pd.to_datetime(
+                    ["2150-01-01 08:00", "2150-06-01 08:00", "2150-02-01 08:00"]
+                ),
+            }
+        )
+
+    def test_duplicate_anchor_raises_with_guidance(self):
+        aligner = CohortAligner(anchor_col="intime", id_col="subject_id")
+        with pytest.raises(ValueError, match=r"1 'subject_id' value.*id_col='stay_id'"):
+            aligner.align(self._events(), self._stays())
+
+    def test_align_per_stay(self):
+        aligned = CohortAligner(anchor_col="intime", id_col="stay_id").align(
+            self._events(), self._stays()
+        )
+        assert aligned["hours_from_anchor"].tolist() == [1.0, 2.0, 4.0]
+
+    def test_first_stay_per_patient(self):
+        first = self._stays().sort_values("intime").drop_duplicates("subject_id")
+        aligned = CohortAligner(anchor_col="intime", id_col="subject_id").align(
+            self._events(), first
+        )
+        # Patient 1's second-stay event is ~3600h after the first stay: outside 48h.
+        assert aligned["stay_id"].tolist() == [10, 20]
+
+    def test_missing_column_raises(self):
+        with pytest.raises(ValueError, match=r"anchor_df is missing column\(s\) \['intime'\]"):
+            CohortAligner(anchor_col="intime").align(self._events(), self._stays()[["subject_id"]])
+
+    def test_unanchored_events_dropped_with_warning(self, caplog):
+        stays = self._stays()[lambda d: d.stay_id != 20]
+        with caplog.at_level("WARNING"):
+            aligned = CohortAligner(anchor_col="intime", id_col="stay_id").align(
+                self._events(), stays
+            )
+        assert 20 not in set(aligned["stay_id"])
+        assert "dropping 1 events" in caplog.text

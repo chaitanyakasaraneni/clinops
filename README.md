@@ -376,12 +376,14 @@ enriched = LagFeatureBuilder(
 ```python
 from clinops.temporal import CohortAligner
 
+# One anchor per id: align on stay_id so patients with several ICU stays work
 aligned = CohortAligner(
     anchor_col="intime",
+    id_col="stay_id",
     max_hours_before=0,
     max_hours_after=48,
-).align(events_df=charts, anchor_df=stays)
-# → filtered to 48h post-admission, with hours_from_anchor column
+).align(events_df=vitals, anchor_df=stays[["stay_id", "intime"]])
+# → filtered to 48h after each stay's admission, with hours_from_anchor column
 ```
 
 ### Imputation strategies
