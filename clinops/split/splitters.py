@@ -21,7 +21,7 @@ All three splitters here address one or more of these problems.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -431,10 +431,10 @@ class PatientSplitter:
             f"test={len(test_patients)} patients ({len(test):,} rows)"
         )
 
-        # Verify no leakage
+        # Leakage assertion, as in GroupedPatientSplitter.
         overlap = set(train[self.id_col].unique()) & set(test[self.id_col].unique())
         if overlap:
-            logger.error(f"PatientSplitter: {len(overlap)} patients leaked across splits!")
+            raise RuntimeError(f"PatientSplitter: {len(overlap)} patients leaked across splits")
 
         return SplitResult(
             train=train,
@@ -455,27 +455,35 @@ class StratifiedPatientSplitter:
     Patient-level split with outcome stratification.
 
     Combines the patient-boundary guarantee of PatientSplitter with
-    stratification on a binary or multi-class outcome column. Ensures
-    the outcome rate in train and test approximately matches the
-    population rate, which is important for imbalanced clinical outcomes
+    stratification on a binary or multiclass outcome column. Ensures
+    the class proportions in train and test approximately match the
+    population, which is important for imbalanced clinical outcomes
     (e.g., in-hospital mortality typically 5–15%).
 
     The algorithm:
-    1. Compute per-patient outcome (e.g., any positive in admissions)
-    2. Separately sample positive and negative patients at ``test_size``
-    3. Combine → test set has ~same positive rate as full population
+
+    1. Compute one label per patient with ``patient_outcome_fn``.
+    2. For each distinct label, sample ``test_size`` of its patients for test.
+    3. Combine the samples, so every class appears in test at about its
+       population proportion.
+
+    Labels can be any hashable values: 0/1, booleans, -1/1, integer classes,
+    or strings. A class with a single patient cannot be split; that patient
+    goes to test and a warning is logged.
 
     Parameters
     ----------
     id_col:
         Patient identifier column. Default ``"subject_id"``.
     outcome_col:
-        Binary outcome column (0/1 or bool). Default ``"mortality"``.
+        Outcome column. Binary (0/1 or bool) or multiclass. Default ``"mortality"``.
     test_size:
-        Fraction of patients to hold out. Default 0.2.
+        Fraction of patients to hold out, applied within each class. Default 0.2.
     patient_outcome_fn:
-        Function that maps a per-patient group of outcome values → scalar label.
-        Default: any positive observation → patient is positive.
+        Function that maps a patient's outcome values to one label. Default:
+        the maximum value, so for a binary outcome any positive row makes the
+        patient positive, and for an ordinal outcome the patient gets their
+        highest class. Pass e.g. ``lambda s: s.iloc[-1]`` to use the last value.
     random_state:
         Random seed. Default 42.
 
@@ -505,7 +513,7 @@ class StratifiedPatientSplitter:
         id_col: str = "subject_id",
         outcome_col: str = "mortality",
         test_size: float = 0.2,
-        patient_outcome_fn: Callable[[pd.Series], int] | None = None,
+        patient_outcome_fn: Callable[[pd.Series], Any] | None = None,
         random_state: int = 42,
     ) -> None:
         if not 0 < test_size < 1:
@@ -513,9 +521,7 @@ class StratifiedPatientSplitter:
         self.id_col = id_col
         self.outcome_col = outcome_col
         self.test_size = test_size
-        self._outcome_fn: Callable[[pd.Series], int] = patient_outcome_fn or (
-            lambda s: int(s.max())
-        )
+        self._outcome_fn: Callable[[pd.Series], Any] = patient_outcome_fn or _max_label
         self.random_state = random_state
 
     def split(self, df: pd.DataFrame) -> SplitResult:
@@ -537,37 +543,55 @@ class StratifiedPatientSplitter:
 
         rng = np.random.default_rng(self.random_state)
 
-        # Derive per-patient outcome label
-        patient_labels = (
-            df.groupby(self.id_col)[self.outcome_col]
-            .apply(lambda s: self._outcome_fn(s))
-            .reset_index()
-        )
-        patient_labels.columns = [self.id_col, "_label"]
+        # One label per patient.
+        labels = df.groupby(self.id_col)[self.outcome_col].agg(self._outcome_fn)
+        if labels.isna().any():
+            raise ValueError(
+                f"patient_outcome_fn returned a missing label for {int(labels.isna().sum())} "
+                f"patients; check '{self.outcome_col}' for patients with no outcome values"
+            )
 
-        positives = patient_labels[patient_labels["_label"] == 1][self.id_col].to_numpy()
-        negatives = patient_labels[patient_labels["_label"] == 0][self.id_col].to_numpy()
-
-        n_pos_test = max(1, round(len(positives) * self.test_size))
-        n_neg_test = max(1, round(len(negatives) * self.test_size))
-
-        test_pos = set(rng.choice(positives, size=n_pos_test, replace=False))
-        test_neg = set(rng.choice(negatives, size=n_neg_test, replace=False))
-        test_patients = test_pos | test_neg
-        train_patients = set(patient_labels[self.id_col].values) - test_patients
+        # Sample test_size of every class. Classes are visited in descending order,
+        # so binary 0/1 outcomes draw positives first, as in earlier releases, and a
+        # given seed gives the same binary split as before.
+        test_patients: set[Any] = set()
+        for label in _ordered_classes(labels):
+            members = labels.index[labels == label].to_numpy()
+            n_test = max(1, round(len(members) * self.test_size))
+            if len(members) == 1:
+                logger.warning(
+                    f"StratifiedPatientSplitter: class {label!r} has only one patient; "
+                    "it goes to test and train has no example of it"
+                )
+            else:
+                n_test = min(n_test, len(members) - 1)
+            test_patients |= set(rng.choice(members, size=n_test, replace=False))
+        train_patients = set(labels.index) - test_patients
 
         train = df[df[self.id_col].isin(train_patients)].reset_index(drop=True)
         test = df[df[self.id_col].isin(test_patients)].reset_index(drop=True)
 
-        # Compute outcome rates for reporting
-        pop_rate = float(df[self.outcome_col].mean())
-        train_rate = float(train[self.outcome_col].mean()) if len(train) else 0.0
-        test_rate = float(test[self.outcome_col].mean()) if len(test) else 0.0
+        class_counts = {
+            "train_class_counts": _class_counts(labels, train_patients),
+            "test_class_counts": _class_counts(labels, test_patients),
+        }
+        # Row-level outcome rates are only meaningful for a binary outcome.
+        rates: dict[str, float] = {}
+        if set(labels.unique()) <= {0, 1}:
+            pop_rate = float(df[self.outcome_col].mean())
+            train_rate = float(train[self.outcome_col].mean()) if len(train) else 0.0
+            test_rate = float(test[self.outcome_col].mean()) if len(test) else 0.0
+            rates = {
+                "population_outcome_rate": round(pop_rate, 4),
+                "train_outcome_rate": round(train_rate, 4),
+                "test_outcome_rate": round(test_rate, 4),
+            }
 
         logger.info(
-            f"StratifiedPatientSplitter: population rate={pop_rate:.3f} | "
-            f"train rate={train_rate:.3f} ({len(train_patients)} patients, {len(train):,} rows) | "
-            f"test rate={test_rate:.3f} ({len(test_patients)} patients, {len(test):,} rows)"
+            f"StratifiedPatientSplitter: {len(labels)} patients → "
+            f"train={len(train_patients)} ({len(train):,} rows), "
+            f"test={len(test_patients)} ({len(test):,} rows); "
+            f"test patients per class={class_counts['test_class_counts']}"
         )
 
         return SplitResult(
@@ -576,12 +600,37 @@ class StratifiedPatientSplitter:
             metadata={
                 "id_col": self.id_col,
                 "outcome_col": self.outcome_col,
-                "population_outcome_rate": round(pop_rate, 4),
-                "train_outcome_rate": round(train_rate, 4),
-                "test_outcome_rate": round(test_rate, 4),
+                **rates,
+                **class_counts,
                 "n_train_patients": len(train_patients),
                 "n_test_patients": len(test_patients),
                 "train_rows": len(train),
                 "test_rows": len(test),
+                "random_state": self.random_state,
             },
         )
+
+
+def _max_label(values: pd.Series) -> Hashable:
+    """Default patient label: the largest outcome value (any positive → positive)."""
+    return _py(values.max())
+
+
+def _py(value: Hashable) -> Hashable:
+    """Unwrap a NumPy scalar so labels print and compare as plain Python values."""
+    return value.item() if isinstance(value, np.generic) else value
+
+
+def _ordered_classes(labels: pd.Series) -> list[Hashable]:
+    """Distinct labels, largest first; first-seen order if they cannot be sorted."""
+    classes = [_py(c) for c in labels.unique()]
+    try:
+        return sorted(classes, reverse=True)  # type: ignore[type-var]
+    except TypeError:
+        return classes
+
+
+def _class_counts(labels: pd.Series, patients: set[Any]) -> dict[Hashable, int]:
+    """Number of patients per label among ``patients``."""
+    counts = labels[labels.index.isin(patients)].value_counts()
+    return {_py(k): int(v) for k, v in sorted(counts.items(), key=lambda kv: str(kv[0]))}
