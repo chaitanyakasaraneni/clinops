@@ -103,16 +103,27 @@ class CohortAligner:
     realignment so downstream models see time-relative-to-event rather
     than absolute timestamps.
 
+    Each ``id_col`` value must have exactly one anchor. For patients with
+    several ICU stays, either align per stay by passing the stay identifier
+    as ``id_col`` (e.g. ``"stay_id"``, which MIMIC-IV ``chartevents`` and
+    ``icustays`` both carry), or reduce ``anchor_df`` to one row per patient
+    first, e.g. the first stay::
+
+        first_stays = stays.sort_values("intime").drop_duplicates("subject_id")
+
     Parameters
     ----------
     anchor_col:
-        Column containing the anchor event timestamp for each patient.
+        Column containing the anchor event timestamp.
     id_col:
-        Patient identifier column.
+        Identifier shared by ``events_df`` and ``anchor_df``. Use a patient
+        id for one anchor per patient or a stay id for one anchor per stay.
     max_hours_before:
         Include data up to this many hours before the anchor event.
     max_hours_after:
         Include data up to this many hours after the anchor event.
+    time_col:
+        Event timestamp column in ``events_df``.
 
     Examples
     --------
@@ -134,6 +145,24 @@ class CohortAligner:
     >>> aligner.align(chartevents, stays)
        subject_id           charttime  heart_rate  hours_from_anchor
     0           1 2150-01-01 20:00:00        92.0               12.0
+
+    A patient with two ICU stays: align each event to its own stay.
+
+    >>> events = pd.DataFrame({
+    ...     "subject_id": [1, 1],
+    ...     "stay_id": [10, 11],
+    ...     "charttime": pd.to_datetime(["2150-01-01 09:00", "2150-06-01 10:00"]),
+    ...     "heart_rate": [80.0, 95.0],
+    ... })
+    >>> stays = pd.DataFrame({
+    ...     "subject_id": [1, 1],
+    ...     "stay_id": [10, 11],
+    ...     "intime": pd.to_datetime(["2150-01-01 08:00", "2150-06-01 08:00"]),
+    ... })
+    >>> CohortAligner(anchor_col="intime", id_col="stay_id").align(events, stays)
+       subject_id  stay_id           charttime  heart_rate  hours_from_anchor
+    0           1       10 2150-01-01 09:00:00        80.0                1.0
+    1           1       11 2150-06-01 10:00:00        95.0                2.0
     """
 
     def __init__(
@@ -163,28 +192,59 @@ class CohortAligner:
         events_df:
             Long-format events with id_col and time_col.
         anchor_df:
-            One row per patient with id_col and anchor_col.
+            Exactly one row per ``id_col`` value, with ``id_col`` and
+            ``anchor_col``.
 
         Returns
         -------
         pd.DataFrame
             events_df filtered to the alignment window with a new
-            ``hours_from_anchor`` column (negative = before anchor).
+            ``hours_from_anchor`` column (negative = before anchor). Events
+            whose ``id_col`` value has no anchor are dropped.
+
+        Raises
+        ------
+        ValueError
+            If a required column is missing or ``anchor_df`` has more than one
+            row for an ``id_col`` value.
         """
-        anchor_map = anchor_df.set_index(self.id_col)[self.anchor_col]
-        anchor_map = pd.to_datetime(anchor_map)
+        for frame, name, cols in (
+            (anchor_df, "anchor_df", (self.id_col, self.anchor_col)),
+            (events_df, "events_df", (self.id_col, self.time_col)),
+        ):
+            missing = [c for c in cols if c not in frame.columns]
+            if missing:
+                raise ValueError(f"CohortAligner: {name} is missing column(s) {missing}")
+
+        duplicated = anchor_df[self.id_col].duplicated(keep=False)
+        if duplicated.any():
+            n_ids = anchor_df.loc[duplicated, self.id_col].nunique()
+            raise ValueError(
+                f"CohortAligner: anchor_df has more than one {self.anchor_col!r} for "
+                f"{n_ids} {self.id_col!r} value(s), but each needs exactly one anchor. "
+                f"If these are patients with several ICU stays, align per stay with "
+                f"id_col='stay_id', or keep one row per patient, e.g. "
+                f"anchor_df.sort_values({self.anchor_col!r}).drop_duplicates({self.id_col!r})."
+            )
+
+        anchor_map = pd.to_datetime(anchor_df.set_index(self.id_col)[self.anchor_col])
 
         df = events_df.copy()
         df[self.time_col] = pd.to_datetime(df[self.time_col])
 
         anchors = df[self.id_col].map(anchor_map)
+        n_unanchored = int(anchors.isna().sum())
+        if n_unanchored:
+            logger.warning(
+                f"CohortAligner: dropping {n_unanchored:,} events whose {self.id_col!r} "
+                "has no anchor in anchor_df"
+            )
         df["hours_from_anchor"] = (df[self.time_col] - anchors).dt.total_seconds() / 3600
 
         df = df[
             (df["hours_from_anchor"] >= -self.max_hours_before)
             & (df["hours_from_anchor"] <= self.max_hours_after)
-        ]
-        df = df.drop(columns=[], errors="ignore").reset_index(drop=True)
+        ].reset_index(drop=True)
 
         logger.info(
             f"CohortAligner: retained {len(df):,} rows "

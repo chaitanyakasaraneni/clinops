@@ -35,7 +35,9 @@ print(clinops.__version__)
 
 ## End-to-end example
 
-This walkthrough mirrors a typical research workflow: load MIMIC-IV data, preprocess it, build temporal windows, and produce a patient-level train/test split without data leakage.
+This walkthrough mirrors a typical research workflow: load MIMIC-IV data, preprocess it, build temporal windows, and produce a patient-level train/test split without data leakage. It predicts in-hospital mortality from the first 48 hours of each ICU stay.
+
+The code runs as written against MIMIC-IV 2.2; CI runs it on a synthetic copy of the tables.
 
 ### 1. Load data
 
@@ -43,83 +45,104 @@ This walkthrough mirrors a typical research workflow: load MIMIC-IV data, prepro
 from clinops.ingest import MimicTableLoader
 
 tbl = MimicTableLoader("/data/mimic-iv-2.2")
+subjects = list(range(10000032, 10000132))
 
-# ICU chartevents — charttime parsed as datetime automatically
-charts = tbl.chartevents(subject_ids=list(range(10000032, 10000132)))
+# MIMIC-IV item IDs for four vital signs
+VITALS = {220045: "heart_rate", 220277: "spo2", 220210: "resp_rate", 220052: "map"}
 
-# ICU stays — needed to align windows to admission time
-stays = tbl.icustays(subject_ids=list(range(10000032, 10000132)))
+# ICU chartevents (long format: one row per measurement, charttime parsed)
+charts = tbl.chartevents(subject_ids=subjects, item_ids=list(VITALS))
 
-# Admissions — contains hospital_expire_flag outcome
-adm = tbl.admissions(subject_ids=list(range(10000032, 10000132)))
+# ICU stays. A patient can have several, each with its own intime
+stays = tbl.icustays(subject_ids=subjects)
+
+# Admissions contain the hospital_expire_flag outcome
+adm = tbl.admissions(subject_ids=subjects)
 ```
 
-### 2. Preprocess
+### 2. Reshape and preprocess
+
+`chartevents` has one row per measurement. The preprocessing transformers work on named columns, so pivot to one column per vital sign first.
 
 ```python
-from clinops.preprocess import ClinicalOutlierClipper, UnitNormalizer
+from clinops.preprocess import ClinicalOutlierClipper
 
-# Clip values outside physiological bounds (heart_rate, spo2, sbp, ...)
-charts = ClinicalOutlierClipper(action="clip").fit_transform(charts)
+vitals = (
+    charts.assign(vital=charts["itemid"].map(VITALS))
+    .pivot_table(
+        index=["subject_id", "stay_id", "charttime"],
+        columns="vital",
+        values="valuenum",
+        aggfunc="mean",
+    )
+    .reset_index()
+    .rename_axis(columns=None)
+)
 
-# Normalize any mixed-unit columns (e.g. glucose in mmol/L → mg/dL)
-if "glucose_unit" in charts.columns:
-    charts = UnitNormalizer(
-        column_unit_map={"glucose": "glucose_unit"}
-    ).transform(charts)
+# Clip values outside physiological bounds (heart_rate, spo2, resp_rate, map, ...)
+vitals = ClinicalOutlierClipper(action="clip").fit_transform(vitals)
 ```
 
+If a lab is recorded in mixed units, add a unit column and use `UnitNormalizer` here too; see the [preprocess guide](guide/preprocess.md).
+
 ### 3. Align to ICU admission
+
+`CohortAligner` needs exactly one anchor time per id. Because a patient can have several ICU stays, align on `stay_id` so each measurement is measured from the start of its own stay.
 
 ```python
 from clinops.temporal import CohortAligner
 
-# Keep only measurements within 48 hours of ICU admission
+# Keep only measurements within 48 hours of each ICU admission
 aligned = CohortAligner(
     anchor_col="intime",
+    id_col="stay_id",
     max_hours_before=0,
     max_hours_after=48,
-).align(events_df=charts, anchor_df=stays)
+).align(events_df=vitals, anchor_df=stays[["stay_id", "intime"]])
 ```
+
+To use only each patient's first stay instead, pass
+`stays.sort_values("intime").drop_duplicates("subject_id")` as `anchor_df` with `id_col="subject_id"`.
 
 ### 4. Build temporal windows
 
 ```python
-from clinops.temporal import TemporalWindower, Imputer, ImputationStrategy
+from clinops.temporal import ImputationStrategy, TemporalWindower
 
-# 24-hour sliding windows, stepped every 6 hours
-windower = TemporalWindower(window_hours=24, step_hours=6)
+# 24-hour sliding windows, stepped every 6 hours, one series per stay.
+# Windows with no measurement of a vital take the previous window's value.
+windower = TemporalWindower(
+    window_hours=24,
+    step_hours=6,
+    imputation=ImputationStrategy.FORWARD_FILL,
+)
 windows = windower.fit_transform(
     df=aligned,
-    id_col="subject_id",
+    id_col="stay_id",
     time_col="charttime",
     feature_cols=["heart_rate", "spo2", "resp_rate", "map"],
 )
-
-# Gap-aware forward fill — does not propagate across patients or
-# across gaps longer than 6 hours
-imputer = Imputer(
-    ImputationStrategy.FORWARD_FILL,
-    max_gap_hours=6,
-    time_col="charttime",
-    id_col="subject_id",
-)
-windows = imputer.fit_transform(windows)
 ```
+
+Values still missing at the start of a stay stay `NaN`. Fill them with an `Imputer` fitted on the training split only (after step 5) so test data never influences the fill values.
 
 ### 5. Add outcome and split
 
 ```python
 from clinops.split import StratifiedPatientSplitter
 
-# Attach outcome from admissions table
+# Outcome is per admission; map it to each stay, then to its windows
+stay_outcome = stays[["stay_id", "subject_id", "hadm_id"]].merge(
+    adm[["hadm_id", "hospital_expire_flag"]], on="hadm_id", how="left"
+)
 windows = windows.merge(
-    adm[["subject_id", "hospital_expire_flag"]],
-    on="subject_id",
+    stay_outcome[["stay_id", "subject_id", "hospital_expire_flag"]],
+    on="stay_id",
     how="left",
 )
 
-# Stratified patient split — preserves outcome rate, no cross-patient leakage
+# Split by patient, not by stay, so a patient's stays stay together.
+# A patient who died in any admission counts as positive for stratification.
 result = StratifiedPatientSplitter(
     id_col="subject_id",
     outcome_col="hospital_expire_flag",
@@ -128,7 +151,7 @@ result = StratifiedPatientSplitter(
 
 print(result.summary())
 train_df = result.train
-test_df  = result.test
+test_df = result.test
 ```
 
 ---
