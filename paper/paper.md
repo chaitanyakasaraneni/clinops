@@ -110,8 +110,8 @@ indicator) fitted on training data and applied to test data without leakage.
 from appearing in training. `PatientSplitter` assigns complete patient records to
 either train or test, with a guarantee that no `subject_id` appears in both
 partitions. `StratifiedPatientSplitter` extends patient-level splitting with
-stratification on a binary outcome column, preserving the population outcome rate
-in both splits — critical for imbalanced clinical endpoints such as in-hospital
+stratification on a binary or multiclass outcome column, preserving the population
+class proportions in both splits — critical for imbalanced clinical endpoints such as in-hospital
 mortality (typically 5–15% in ICU cohorts).
 
 All transformers follow the scikit-learn `fit`/`transform`/`fit_transform`

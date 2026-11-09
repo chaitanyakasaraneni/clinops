@@ -443,7 +443,8 @@ assert not set(result.train["subject_id"]) & set(result.test["subject_id"])
 ### Stratified patient split — preserves outcome rate
 
 Critical for imbalanced clinical endpoints (in-hospital mortality is typically
-5–15%). Stratifies on a binary outcome while respecting patient boundaries.
+5–15%). Stratifies on a binary or multiclass outcome while respecting patient
+boundaries: each class is split at `test_size`, so every class reaches the test set.
 
 ```python
 from clinops.split import StratifiedPatientSplitter

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 (unreleased)
+
+Addresses the second round of [pyOpenSci review](https://github.com/pyOpenSci/software-submission/issues/362)
+feedback.
+
+### Fixed
+
+- `StratifiedPatientSplitter` stratifies on every class of a multiclass outcome.
+  Previously only patients labelled 0 or 1 could be sampled for test, so other
+  classes were always in train, and labels such as -1/1 raised an unclear error.
+  Binary 0/1 splits are unchanged for a given `random_state`. `metadata` now
+  reports `train_class_counts` and `test_class_counts`; the `*_outcome_rate`
+  entries are only included for 0/1 outcomes.
+  ([pyOpenSci review](https://github.com/pyOpenSci/software-submission/issues/362#issuecomment-6540182036),
+  [#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
+- `PatientSplitter` raises `RuntimeError` if a patient ends up in both splits,
+  like `GroupedPatientSplitter`, instead of only logging an error.
+  ([#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
+
 ## 0.6.1
 
 A patch release with one bug fix and documentation, testing, and packaging
