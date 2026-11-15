@@ -72,6 +72,31 @@ class TestClinicalSchema:
 # ---------------------------------------------------------------------------
 
 
+class TestSchemaViolationReporting:
+    """Each violation type is collected when strict=False and raised when strict=True."""
+
+    CASES = [
+        ("missing", ColumnSpec("absent"), "Missing required column: 'absent'"),
+        ("nullable", ColumnSpec("x", nullable=False), "1 null values"),
+        ("min", ColumnSpec("x", min_value=2), "1 values below min_value=2"),
+        ("max", ColumnSpec("x", max_value=2), "1 values above max_value=2"),
+        ("allowed", ColumnSpec("x", allowed_values=[1, 2]), "not in allowed_values"),
+    ]
+
+    @pytest.mark.parametrize(("name", "spec", "message"), CASES, ids=[c[0] for c in CASES])
+    def test_collected_when_not_strict(self, name, spec, message):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0, None]})
+        violations = ClinicalSchema(name="t", columns=[spec]).validate(df, strict=False)
+        assert len(violations) == 1
+        assert message in violations[0]
+
+    @pytest.mark.parametrize(("name", "spec", "message"), CASES, ids=[c[0] for c in CASES])
+    def test_raised_when_strict(self, name, spec, message):
+        df = pd.DataFrame({"x": [1.0, 2.0, 3.0, None]})
+        with pytest.raises(SchemaValidationError, match=message):
+            ClinicalSchema(name="t", columns=[spec]).validate(df, strict=True)
+
+
 class TestFlatFileLoader:
     def test_load_csv(self, tmp_path):
         csv_file = tmp_path / "test.csv"
