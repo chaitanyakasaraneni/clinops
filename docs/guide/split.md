@@ -29,6 +29,12 @@ train_df = result.train
 test_df  = result.test
 ```
 
+`train_frac` must be strictly between 0 and 1, and a cutoff that leaves either split empty raises `ValueError`. A numeric `time_col`, such as eICU's minute offsets from ICU admission, is compared as numbers, so pass a numeric `cutoff` (for example `TemporalSplitter(cutoff=24 * 60, time_col="offset")`). Rows with a missing time are left out of both splits, with a warning; the patient splitters treat rows with a missing id the same way.
+
+### Random seeds
+
+The patient splitters default to `random_state=42`, so a split is reproducible without extra arguments. The flip side is that everyone who keeps the default gets the same assignment for the same data. Pass your own seed to get an independent split (NumPy recommends a large random one, e.g. from `secrets.randbits(64)`), and record it with your results, or pass `None` for a different split on every run.
+
 ---
 
 ## PatientSplitter

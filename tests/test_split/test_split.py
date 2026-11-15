@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from clinops.split import (
+    GroupedPatientSplitter,
     PatientSplitter,
     SplitResult,
     StratifiedPatientSplitter,
@@ -129,11 +130,36 @@ class TestTemporalSplitter:
         result = splitter.split(temporal_df)
         assert result.train_size + result.test_size == len(temporal_df)
 
-    def test_empty_test_when_cutoff_after_all_data(self, temporal_df):
-        splitter = TemporalSplitter(cutoff="2200-01-01", time_col="charttime")
-        result = splitter.split(temporal_df)
-        assert result.test_size == 0
-        assert result.train_size == len(temporal_df)
+    @pytest.mark.parametrize(("cutoff", "empty"), [("2200-01-01", "test"), ("2100-01-01", "train")])
+    def test_cutoff_outside_data_raises(self, temporal_df, cutoff, empty):
+        # An empty split breaks downstream code that expects data (pyOpenSci #39).
+        with pytest.raises(ValueError, match=f"{empty} split empty"):
+            TemporalSplitter(cutoff=cutoff, time_col="charttime").split(temporal_df)
+
+    @pytest.mark.parametrize("frac", [0, 1, 2, -0.5])
+    def test_train_frac_must_be_a_proper_fraction(self, frac):
+        with pytest.raises(ValueError, match="train_frac"):
+            TemporalSplitter(train_frac=frac)
+
+    def test_numeric_times_stay_numbers(self):
+        # eICU-style minute offsets: the cutoff is a number, not a 1970 timestamp.
+        df = pd.DataFrame({"offset": [0, 60, 120, 180, 240]})
+        result = TemporalSplitter(train_frac=0.5, time_col="offset").split(df)
+        assert result.metadata["cutoff"] == 120.0
+        assert result.train["offset"].tolist() == [0, 60]
+        result = TemporalSplitter(cutoff=200, time_col="offset").split(df)
+        assert result.test["offset"].tolist() == [240]
+        with pytest.raises(TypeError, match="must be a number"):
+            TemporalSplitter(cutoff="2150-01-01", time_col="offset").split(df)
+
+    def test_missing_times_warn_and_are_excluded(self, caplog):
+        df = pd.DataFrame(
+            {"charttime": pd.to_datetime(["2150-01-01", "2150-01-02", None, "2150-01-04"])}
+        )
+        with caplog.at_level("WARNING"):
+            result = TemporalSplitter(train_frac=0.5).split(df)
+        assert "1 rows have no 'charttime'" in caplog.text
+        assert result.train_size + result.test_size == 3
 
 
 # -----------------------------------------------------------------------
@@ -391,3 +417,38 @@ class TestPatientSplitterLeakage:
         monkeypatch.setattr(pd.Series, "isin", leaky_isin)
         with pytest.raises(RuntimeError, match="leaked"):
             PatientSplitter(id_col="subject_id").split(patient_df)
+
+
+class TestMissingIds:
+    """Rows without an id are not one big 'patient' (they are left out, with a warning)."""
+
+    def _df(self):
+        return pd.DataFrame(
+            {
+                "subject_id": [1, 2, 3, 4, 5, None, None],
+                "uniquepid": ["a", "b", "c", "d", "e", None, None],
+            }
+        )
+
+    def test_patient_splitter(self, caplog):
+        with caplog.at_level("WARNING"):
+            result = PatientSplitter(test_size=0.2).split(self._df())
+        assert "2 rows have no 'subject_id'" in caplog.text
+        assert result.metadata["n_train_patients"] + result.metadata["n_test_patients"] == 5
+        assert result.train_size + result.test_size == 5
+
+    def test_grouped_splitter(self, caplog):
+        with caplog.at_level("WARNING"):
+            result = GroupedPatientSplitter(group_col="uniquepid", stay_col=None).split(self._df())
+        assert "2 rows have no 'uniquepid'" in caplog.text
+        assert sum(result.sizes) == 5
+
+
+@pytest.mark.parametrize("cls", [PatientSplitter, StratifiedPatientSplitter])
+def test_random_state_none_gives_a_fresh_split(cls, stratified_df):
+    kwargs = {"outcome_col": "outcome"} if cls is StratifiedPatientSplitter else {}
+    seen = {
+        frozenset(cls(random_state=None, **kwargs).split(stratified_df).test["subject_id"])
+        for _ in range(5)
+    }
+    assert len(seen) > 1
