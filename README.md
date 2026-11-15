@@ -144,7 +144,9 @@ No `ColumnSpec` definitions, no schema boilerplate.
 ```python
 from clinops.ingest import MimicTableLoader
 
-tbl = MimicTableLoader("/data/mimic-iv-2.2")
+# chunk_size streams chartevents/labevents and filters each chunk,
+# so the multi-GB tables never have to fit in memory
+tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
 
 # ICU vitals — charttime parsed as datetime automatically
 charts = tbl.chartevents(subject_ids=[10000032, 10000980])

@@ -37,18 +37,28 @@ print(clinops.__version__)
 
 This walkthrough mirrors a typical research workflow: load MIMIC-IV data, preprocess it, build temporal windows, and produce a patient-level train/test split without data leakage. It predicts in-hospital mortality from the first 48 hours of each ICU stay.
 
-The code runs as written against MIMIC-IV 2.2; CI runs it on a synthetic copy of the tables.
+The code is written for MIMIC-IV 2.2. CI runs it unchanged on a small synthetic copy of the tables that includes patients with several ICU stays.
 
 ### 1. Load data
 
 ```python
 from clinops.ingest import MimicTableLoader
 
-tbl = MimicTableLoader("/data/mimic-iv-2.2")
+# chartevents has hundreds of millions of rows. With chunk_size set, it is read
+# in chunks and the filters below are applied to each one, so only matching
+# rows are kept in memory.
+tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
 subjects = list(range(10000032, 10000132))
 
-# MIMIC-IV item IDs for four vital signs
-VITALS = {220045: "heart_rate", 220277: "spo2", 220210: "resp_rate", 220052: "map"}
+# MIMIC-IV item IDs for four vital signs. Mean arterial pressure is charted
+# as invasive (220052) or non-invasive (220181); both map to "map".
+VITALS = {
+    220045: "heart_rate",
+    220277: "spo2",
+    220210: "resp_rate",
+    220052: "map",
+    220181: "map",
+}
 
 # ICU chartevents (long format: one row per measurement, charttime parsed)
 charts = tbl.chartevents(subject_ids=subjects, item_ids=list(VITALS))

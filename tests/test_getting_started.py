@@ -16,7 +16,7 @@ import pytest
 
 DOC = Path(__file__).resolve().parents[1] / "docs" / "getting-started.md"
 DOC_PATH = "/data/mimic-iv-2.2"
-VITALS = {220045: (80, 15), 220277: (96, 3), 220210: (18, 5), 220052: (75, 12)}
+VITALS = {220045: (80, 15), 220277: (96, 3), 220210: (18, 5), 220052: (75, 12), 220181: (78, 12)}
 
 
 def walkthrough_code() -> str:

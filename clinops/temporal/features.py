@@ -192,8 +192,8 @@ class CohortAligner:
         events_df:
             Long-format events with id_col and time_col.
         anchor_df:
-            Exactly one row per ``id_col`` value, with ``id_col`` and
-            ``anchor_col``.
+            One anchor per ``id_col`` value, in ``id_col`` and ``anchor_col``.
+            Repeated identical rows are allowed.
 
         Returns
         -------
@@ -216,9 +216,11 @@ class CohortAligner:
             if missing:
                 raise ValueError(f"CohortAligner: {name} is missing column(s) {missing}")
 
-        duplicated = anchor_df[self.id_col].duplicated(keep=False)
+        # Exact duplicate rows are harmless; different anchors for one id are not.
+        anchors_by_id = anchor_df[[self.id_col, self.anchor_col]].drop_duplicates()
+        duplicated = anchors_by_id[self.id_col].duplicated(keep=False)
         if duplicated.any():
-            n_ids = anchor_df.loc[duplicated, self.id_col].nunique()
+            n_ids = anchors_by_id.loc[duplicated, self.id_col].nunique()
             raise ValueError(
                 f"CohortAligner: anchor_df has more than one {self.anchor_col!r} for "
                 f"{n_ids} {self.id_col!r} value(s), but each needs exactly one anchor. "
@@ -227,7 +229,7 @@ class CohortAligner:
                 f"anchor_df.sort_values({self.anchor_col!r}).drop_duplicates({self.id_col!r})."
             )
 
-        anchor_map = pd.to_datetime(anchor_df.set_index(self.id_col)[self.anchor_col])
+        anchor_map = pd.to_datetime(anchors_by_id.set_index(self.id_col)[self.anchor_col])
 
         df = events_df.copy()
         df[self.time_col] = pd.to_datetime(df[self.time_col])

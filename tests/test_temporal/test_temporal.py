@@ -945,6 +945,11 @@ class TestCohortAlignerAnchors:
         with pytest.raises(ValueError, match=r"1 'subject_id' value.*id_col='stay_id'"):
             aligner.align(self._events(), self._stays())
 
+    def test_identical_duplicate_rows_allowed(self):
+        stays = pd.concat([self._stays(), self._stays()], ignore_index=True)
+        aligned = CohortAligner(anchor_col="intime", id_col="stay_id").align(self._events(), stays)
+        assert aligned["hours_from_anchor"].tolist() == [1.0, 2.0, 4.0]
+
     def test_align_per_stay(self):
         aligned = CohortAligner(anchor_col="intime", id_col="stay_id").align(
             self._events(), self._stays()
