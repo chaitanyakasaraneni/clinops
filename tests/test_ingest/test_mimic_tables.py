@@ -352,10 +352,17 @@ class TestChunkedLoading:
     ("dirname", "expected", "warns"),
     [
         ("mimic-iv-2.2", "2.2", False),
+        ("mimiciv_2.1", "2.1", False),
+        ("mimic4_v2.0", "2.0", False),
+        ("mimic-iv-clinical-database-demo-2.2", "2.2", False),
         ("mimiciv/2.1", "2.1", False),
         ("mimic-iv-3.1", "3.1", True),
         ("physionet.org/files/mimiciv/3.1", "3.1", True),
         ("mimic", "2.2", True),
+        # Unrelated N.N folders are not versions (fallback warning, not "2024.01").
+        ("2024.01/mimic", "2.2", True),
+        ("exports/2.2", "2.2", True),
+        ("mimic-iv-2.2/extracted", "2.2", True),
     ],
 )
 def test_version_detected_from_path(tmp_path, caplog, dirname, expected, warns):

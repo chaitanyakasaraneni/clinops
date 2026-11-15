@@ -31,9 +31,13 @@ logger = logging.getLogger(__name__)
 # MIMIC-IV releases clinops is tested against. Other versions are accepted; the
 # version is metadata only and does not change how tables are read.
 _TESTED_VERSIONS = ("2.2", "2.1", "2.0")
-# A path component naming a release: "mimic-iv-3.1", "mimiciv_2.2", or PhysioNet's
-# "mimiciv/3.1" layout, where the version is its own directory.
-_VERSION_DIR = re.compile(r"(?:mimic-?iv[-_]?v?)?(\d+\.\d+)")
+# The dataset directory names its release, e.g. "mimic-iv-2.2", "mimiciv_2.2",
+# "mimic4_v2.2", or "mimic-iv-clinical-database-demo-2.2" ...
+_VERSIONED_NAME = re.compile(r"mimic\S*?[-_ ]v?(\d+\.\d+)")
+# ... or, in PhysioNet's download layout (".../mimiciv/2.2"), is a bare version
+# directory inside a "mimiciv" one. A bare N.N anywhere else is not a version.
+_BARE_VERSION = re.compile(r"v?(\d+\.\d+)")
+_MIMIC_PARENT = re.compile(r"mimic[-_]?(?:iv|4)")
 
 # Tables large enough that chunk_size applies.
 _CHUNKED_TABLES = frozenset({"chartevents", "labevents"})
@@ -261,11 +265,21 @@ class MimicLoader:
     # ------------------------------------------------------------------
 
     def _detect_version(self) -> str:
-        """Infer the MIMIC-IV version from the directory name (e.g. ``mimic-iv-2.2``)."""
-        for part in reversed(self._cfg.mimic_path.parts):
-            match = _VERSION_DIR.fullmatch(part.lower())
-            if match:
-                return match.group(1)
+        """
+        Infer the MIMIC-IV version from the dataset directory's name.
+
+        Only the directory passed as ``mimic_path`` (the one containing ``hosp/``
+        and ``icu/``) is considered, plus its parent for PhysioNet's
+        ``mimiciv/<version>`` layout, so unrelated folders such as
+        ``/data/2024.01/`` are never read as a version.
+        """
+        path = self._cfg.mimic_path.resolve()
+        name, parent = path.name.lower(), path.parent.name.lower()
+        match = _VERSIONED_NAME.fullmatch(name)
+        if match is None and _MIMIC_PARENT.fullmatch(parent):
+            match = _BARE_VERSION.fullmatch(name)
+        if match:
+            return match.group(1)
         logger.warning("Could not detect MIMIC-IV version from path; assuming 2.2")
         return "2.2"
 
