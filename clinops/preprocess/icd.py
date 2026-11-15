@@ -10,14 +10,14 @@ clinical condition into two non-overlapping code sets.
 This module provides:
 - A bundled general equivalence mapping (GEM) table covering the
   most common ICD-9 → ICD-10 mappings
-- Forward and backward mapping support
+- ICD-9 → ICD-10 mapping of single codes and Series, and harmonization
+  of mixed-version code columns
 - Aggregation to top-level ICD chapters for ML features
-- Phecode-style category mapping for phenotype analysis
 
 Note on GEM completeness
 ------------------------
 The full CMS GEM files contain ~72,000 mappings. This module ships a
-curated subset of ~3,000 high-frequency mappings covering conditions
+curated subset of 63 high-frequency mappings covering conditions
 commonly encountered in ICU and general hospital datasets. For full
 GEM coverage, users can load the official CMS file using
 ``ICDMapper.from_gem_file(path)``.

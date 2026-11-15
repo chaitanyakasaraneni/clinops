@@ -1,8 +1,9 @@
-"""Run the getting-started walkthrough (docs/getting-started.md) end to end.
+"""Run the documented end-to-end workflows against synthetic MIMIC-IV data.
 
-The walkthrough's Python blocks are executed as written against a synthetic
-MIMIC-IV 2.2 directory in which some patients have several ICU stays and
-admissions, so the documented workflow cannot silently drift from the API.
+The Python blocks of the getting-started walkthrough (docs/getting-started.md)
+and the JOSS paper's example (paper/paper.md) are executed as written against a
+synthetic MIMIC-IV 2.2 directory in which some patients have several ICU stays
+and admissions, so the documented workflows cannot silently drift from the API.
 """
 
 from __future__ import annotations
@@ -14,15 +15,28 @@ import numpy as np
 import pandas as pd
 import pytest
 
-DOC = Path(__file__).resolve().parents[1] / "docs" / "getting-started.md"
+ROOT = Path(__file__).resolve().parents[1]
+DOC = ROOT / "docs" / "getting-started.md"
+PAPER = ROOT / "paper" / "paper.md"
 DOC_PATH = "/data/mimic-iv-2.2"
 VITALS = {220045: (80, 15), 220277: (96, 3), 220210: (18, 5), 220052: (75, 12), 220181: (78, 12)}
 
 
-def walkthrough_code() -> str:
-    text = DOC.read_text()
-    section = text[text.index("## End-to-end example") : text.index("## Next steps")]
+def python_blocks(path: Path, start: str, end: str) -> str:
+    text = path.read_text()
+    section = text[text.index(start) : text.index(end)]
     return "\n".join(re.findall(r"```python\n(.*?)```", section, flags=re.DOTALL))
+
+
+def walkthrough_code() -> str:
+    return python_blocks(DOC, "## End-to-end example", "## Next steps")
+
+
+def run(code: str, path: Path, mimic_root: Path) -> dict:
+    assert DOC_PATH in code
+    ns: dict = {}
+    exec(compile(code.replace(DOC_PATH, str(mimic_root)), str(path), "exec"), ns)
+    return ns
 
 
 def write_mimic(root: Path) -> None:
@@ -85,6 +99,19 @@ def write_mimic(root: Path) -> None:
     pd.DataFrame(admissions).to_csv(root / "hosp" / "admissions.csv", index=False)
     pd.DataFrame(stays).to_csv(root / "icu" / "icustays.csv", index=False)
     pd.DataFrame(charts).to_csv(root / "icu" / "chartevents.csv", index=False)
+    # Primary diagnoses in both ICD versions, as in MIMIC-IV.
+    pd.DataFrame(
+        [
+            {
+                "subject_id": a["subject_id"],
+                "hadm_id": a["hadm_id"],
+                "seq_num": 1,
+                "icd_code": ["4280", "I509"][n % 2],
+                "icd_version": [9, 10][n % 2],
+            }
+            for n, a in enumerate(admissions)
+        ]
+    ).to_csv(root / "hosp" / "diagnoses_icd.csv", index=False)
 
 
 @pytest.fixture()
@@ -95,10 +122,7 @@ def mimic_root(tmp_path: Path) -> Path:
 
 
 def test_walkthrough_runs_with_readmitted_patients(mimic_root: Path) -> None:
-    code = walkthrough_code()
-    assert DOC_PATH in code
-    ns: dict = {}
-    exec(compile(code.replace(DOC_PATH, str(mimic_root)), str(DOC), "exec"), ns)
+    ns = run(walkthrough_code(), DOC, mimic_root)
 
     stays, aligned, windows = ns["stays"], ns["aligned"], ns["windows"]
     result = ns["result"]
@@ -122,3 +146,15 @@ def test_walkthrough_runs_with_readmitted_patients(mimic_root: Path) -> None:
         per_patient = split.groupby("subject_id")["stay_id"].nunique()
         expected = stays.groupby("subject_id")["stay_id"].nunique()
         assert (per_patient == expected[per_patient.index]).all()
+
+
+def test_paper_example_runs(mimic_root: Path) -> None:
+    code = python_blocks(PAPER, "# Example Usage", "# Availability")
+    ns = run(code, PAPER, mimic_root)
+
+    # Both ICD versions end up as ICD-10 with a chapter label.
+    assert ns["dx"]["chapter"].notna().all()
+    windows, result = ns["windows"], ns["result"]
+    assert set(windows["stay_id"]) == set(ns["stays"]["stay_id"])
+    assert not set(result.train["subject_id"]) & set(result.test["subject_id"])
+    assert result.test["hospital_expire_flag"].any()

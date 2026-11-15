@@ -1,5 +1,5 @@
 """
-Outlier detection and clipping using physiologically-grounded bounds.
+Outlier detection and clipping using physiological plausibility bounds.
 
 Clinical data contains a high rate of physiologically impossible values —
 transcription errors, unit mix-ups, device artefacts, and data entry
@@ -8,17 +8,16 @@ inappropriate here because true extreme values (e.g., a heart rate of
 180 in a patient with SVT) are clinically meaningful and should not be
 removed.
 
-This module uses published physiological bounds from clinical literature
-to clip or flag values that are impossible regardless of patient state,
-while preserving extreme-but-plausible values.
+This module clips or flags values that are impossible regardless of
+patient state, while preserving extreme-but-plausible values.
 
-References
-----------
-Johnson et al. (2023). MIMIC-IV, a freely accessible electronic health
-record dataset. Scientific Data, 10(1), 1.
-
-Goldberger et al. (2000). PhysioBank, PhysioToolkit, and PhysioNet.
-Circulation, 101(23), e215–e220.
+The built-in bounds (``VITAL_BOUNDS``, ``LAB_BOUNDS``) are plausibility
+limits, not reference ranges: deliberately wide bounds outside which a value
+is physically impossible or almost certainly a recording, unit, or device
+error. They were chosen by the clinops authors and are not taken from a
+single published source. Review them for your setting; every bound can be
+replaced (``bounds=``), extended (``extra_bounds=``), or added
+(``add_bounds()``).
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ class BoundSpec:
 
 
 # -----------------------------------------------------------------------
-# Published physiological bounds
+# Plausibility bounds (chosen by the clinops authors; see module docstring)
 # -----------------------------------------------------------------------
 
 #: Vital sign bounds — values outside these ranges are physiologically
@@ -103,8 +102,9 @@ class ClinicalOutlierClipper:
     """
     Detect and clip physiologically impossible values in clinical DataFrames.
 
-    Uses published physiological bounds to identify values that are
-    impossible regardless of patient state. Values outside bounds are
+    Uses plausibility bounds to identify values that are impossible
+    regardless of patient state (see the module docstring for how the
+    built-in bounds were chosen). Values outside bounds are
     either clipped to the boundary (default) or replaced with NaN.
 
     Parameters

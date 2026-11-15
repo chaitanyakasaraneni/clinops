@@ -27,7 +27,8 @@ blocks for clinical machine learning (ML) data pipelines. It addresses the
 recurring engineering overhead in healthcare AI research by packaging validated
 patterns for data loading, preprocessing, feature engineering, and data splitting
 into a single, well-tested toolkit. The library supports MIMIC-IV [@johnson2023mimic],
-FHIR R4 [@hl7fhir], and arbitrary flat clinical exports, and is designed to prevent
+MIMIC-III [@johnson2016mimic], the eICU Collaborative Research Database
+[@pollard2018eicu], FHIR R4 [@hl7fhir], and arbitrary flat clinical exports, and is designed to prevent
 the class of silent data errors — patient leakage, unit heterogeneity, ICD version
 discontinuities, and physiologically impossible values — that commonly affect
 clinical ML workflows.
@@ -35,21 +36,23 @@ clinical ML workflows.
 # Statement of Need
 
 Building a clinical ML model requires solving a set of data engineering problems
-that are largely orthogonal to the scientific question being asked, yet consume a
-disproportionate share of researcher time. Published surveys of healthcare AI
-projects consistently identify data preparation as the dominant cost
-[@wornow2023shaky; @johnson2018mimic]. Despite this, no general-purpose library
-has emerged that addresses the clinical-specific failure modes that distinguish
-healthcare data from general tabular ML data.
+that are largely orthogonal to the scientific question being asked. Research
+groups working with the same critical care databases repeatedly re-implement the
+same extraction and cleaning steps, which costs time and makes results hard to
+reproduce and compare [@johnson2018mimic]. General-purpose ML libraries do not
+address the clinical-specific failure modes that distinguish healthcare data from
+general tabular data, so each project has to guard against them itself.
 
-**Patient leakage** is a widely underreported source of inflated performance
-metrics in clinical ML. When `sklearn.train_test_split` [@sklearn] is applied to
-admission-level records, a patient with multiple admissions may appear in both
-training and test sets. The model memorises patient-specific physiology rather than
-generalising across patients, producing optimistic held-out performance that does
-not transfer to deployment. Systematic reviews of published clinical prediction
-models have identified data leakage as one of the most prevalent methodological
-flaws in the field [@roberts2019machine; @wynants2020prediction].
+**Patient leakage** inflates performance metrics in clinical ML. When
+`sklearn.train_test_split` [@sklearn] is applied to admission- or record-level
+data, a patient with several admissions can appear in both the training and test
+sets, so the model can exploit patient-specific patterns rather than generalising
+across patients. @saeb2017need show that record-wise cross-validation, which lets
+one subject's records fall on both sides of the split, substantially overestimates
+prediction accuracy compared with subject-wise cross-validation, which matches how
+a clinical model is used on new patients. More broadly, @kapoor2023leakage identify leakage, including
+non-independence between training and test data, as a widespread cause of
+irreproducible results in ML-based science.
 
 **Unit heterogeneity** in multi-site studies is a source of silent numerical
 errors. Glucose reported in mmol/L from a European site is numerically
@@ -75,10 +78,13 @@ pipelines without re-implementing these safeguards from scratch on every project
 
 # Software Description
 
-`clinops` is organised into four modules:
+`clinops` is organised into four core modules for building datasets, plus two
+for running pipelines in production:
 
-**`clinops.ingest`** provides loaders for MIMIC-IV (v2.0–v2.2), FHIR R4, and
-flat CSV/Parquet files with configurable schema validation. The `MimicTableLoader`
+**`clinops.ingest`** provides loaders for MIMIC-IV (tested with v2.0–v2.2),
+MIMIC-III, eICU-CRD, FHIR R4, and flat CSV/Parquet files with configurable schema
+validation. Large event tables are read in chunks with filters applied to each
+chunk, so only matching rows are held in memory. The `MimicTableLoader`
 class exposes the five tables most commonly needed in ICU cohort studies —
 `chartevents`, `labevents`, `admissions`, `diagnoses_icd`, and `icustays` — with
 pre-built schemas, automatic datetime parsing, and convenience flags such as
@@ -86,9 +92,11 @@ pre-built schemas, automatic datetime parsing, and convenience flags such as
 `with_los_band` (adds a categorical length-of-stay column).
 
 **`clinops.preprocess`** provides three preprocessing transformers.
-`ClinicalOutlierClipper` applies published physiological bounds [@normal_ranges]
-to clip, null, or flag values that are physiologically implausible, covering 37
-vitals and laboratory measurements. `UnitNormalizer` converts between 26 registered
+`ClinicalOutlierClipper` clips, nulls, or flags values outside plausibility bounds
+for 37 vital signs and laboratory measurements. The bounds are deliberately wide
+limits, chosen by the authors rather than taken from a published source, that
+separate physically impossible values and recording errors from extreme but real
+measurements; all of them are documented and can be overridden. `UnitNormalizer` converts between 26 registered
 unit pairs (glucose mg/dL ↔ mmol/L, temperature °F ↔ °C, etc.) using either a
 companion unit column or unconditional explicit conversions. `ICDMapper` harmonises
 ICD-9-CM and ICD-10-CM diagnosis codes using the CMS General Equivalence Mappings
@@ -115,53 +123,66 @@ test fraction so both splits approximately keep the population class proportions
 (a class with a single patient can only be placed in one split) — critical for imbalanced clinical endpoints such as in-hospital
 mortality (typically 5–15% in ICU cohorts).
 
+**`clinops.monitor`** checks incoming batches for data quality problems and
+distribution drift against a reference dataset, and **`clinops.orchestrate`**
+stores pipeline artifacts on Google Cloud Storage or Amazon S3 and deploys
+pipelines as AWS Step Functions state machines.
+
 All transformers follow the scikit-learn `fit`/`transform`/`fit_transform`
-interface where applicable. The library is fully typed, passes `mypy --strict`,
-and is tested with 118 unit tests achieving 85% line coverage.
+interface where applicable. The library is fully typed and passes `mypy --strict`.
+Continuous integration runs the test suite (over 450 tests, about 94% line
+coverage) on Python 3.12 to 3.14 with pandas 2 and 3, executes every docstring
+example, and runs the getting-started walkthrough and the example below on
+synthetic MIMIC-IV data.
 
 # Example Usage
 
+The example below builds a leakage-safe mortality-prediction dataset from the first
+48 hours of each ICU stay in MIMIC-IV.
+
 ```python
 from clinops.ingest import MimicTableLoader
-from clinops.preprocess import ClinicalOutlierClipper, UnitNormalizer, ICDMapper
+from clinops.preprocess import ClinicalOutlierClipper, ICDMapper
 from clinops.split import StratifiedPatientSplitter
-from clinops.temporal import TemporalWindower, ImputationStrategy
+from clinops.temporal import CohortAligner, TemporalWindower
 
-# Load MIMIC-IV tables with pre-built schemas
-tbl    = MimicTableLoader("/data/mimic-iv-2.2")
-charts = tbl.chartevents(subject_ids=[10000032, 10000980])
-dx     = tbl.diagnoses_icd(subject_ids=[10000032], primary_only=True)
-stays  = tbl.icustays(with_los_band=True)
+VITALS = {220045: "heart_rate", 220277: "spo2", 220210: "resp_rate"}
 
-# Clip physiologically impossible values
-clipper = ClinicalOutlierClipper(action="clip")
-charts  = clipper.fit_transform(charts)
+# Load tables with pre-built schemas; chartevents is filtered chunk by chunk
+tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
+charts = tbl.chartevents(item_ids=list(VITALS))
+stays, adm = tbl.icustays(), tbl.admissions()
 
-# Harmonise ICD codes and add chapter labels
-mapper        = ICDMapper()
-dx            = mapper.harmonize(dx, code_col="icd_code", version_col="icd_version")
+# Harmonise ICD-9 and ICD-10 diagnoses and add chapter labels
+mapper = ICDMapper()
+dx = mapper.harmonize(
+    tbl.diagnoses_icd(primary_only=True), code_col="icd_code", version_col="icd_version"
+)
 dx["chapter"] = mapper.chapter_series(dx["icd_code"])
 
-# Extract 24-hour feature windows with gap-aware imputation
-windower = TemporalWindower(
-    window_hours=24,
-    step_hours=6,
-    imputation=ImputationStrategy.FORWARD_FILL,
-    max_gap_hours=4,
+# One column per vital sign, then clip physiologically impossible values
+vitals = (
+    charts.assign(vital=charts["itemid"].map(VITALS))
+    .pivot_table(index=["stay_id", "charttime"], columns="vital", values="valuenum")
+    .reset_index()
 )
-windows = windower.fit_transform(
-    df=charts,
-    id_col="subject_id",
-    time_col="charttime",
-    feature_cols=["heart_rate", "spo2", "resp_rate"],
+vitals = ClinicalOutlierClipper(action="clip").fit_transform(vitals)
+
+# First 48 hours of each ICU stay, in 24-hour windows every 6 hours
+aligned = CohortAligner(anchor_col="intime", id_col="stay_id", max_hours_after=48).align(
+    vitals, stays[["stay_id", "intime"]]
+)
+windows = TemporalWindower(window_hours=24, step_hours=6).fit_transform(
+    df=aligned, id_col="stay_id", time_col="charttime", feature_cols=list(VITALS.values())
 )
 
-# Patient-stratified split preserving mortality rate
+# Attach in-hospital mortality, then split by patient, stratified on the outcome
+outcome = stays[["stay_id", "subject_id", "hadm_id"]].merge(
+    adm[["hadm_id", "hospital_expire_flag"]], on="hadm_id"
+)
 result = StratifiedPatientSplitter(
-    id_col="subject_id",
-    outcome_col="hospital_expire_flag",
-    test_size=0.2,
-).split(windows)
+    id_col="subject_id", outcome_col="hospital_expire_flag", test_size=0.2
+).split(windows.merge(outcome, on="stay_id"))
 print(result.summary())
 ```
 

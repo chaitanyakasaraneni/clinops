@@ -10,8 +10,17 @@ readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Chaitanya Kasaraneni", email = "kc.kasaraneni@gmail.com" }]
 keywords = [
-    "healthcare", "clinical", "machine-learning", "bioinformatics",
-    "mimic", "fhir", "mlops", "time-series", "icu", "ehr",
+    "healthcare",
+    "clinical machine learning",
+    "electronic health records",
+    "MIMIC-IV",
+    "MIMIC-III",
+    "eICU",
+    "FHIR",
+    "ICU",
+    "time series",
+    "data preprocessing",
+    "MLOps",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

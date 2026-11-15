@@ -39,6 +39,23 @@ feedback.
 
 ### Documentation
 
+- **Outlier bounds are described accurately.** The docs, README, docstrings, and
+  paper called the built-in `ClinicalOutlierClipper` bounds "published physiological
+  bounds" and cited a textbook that does not contain them. They are plausibility
+  limits chosen by the clinops authors; the preprocess guide now lists all 37 with
+  their units, generated from the code and checked by a test (the previous
+  partial table had wrong `sbp`/`dbp` limits). No bound values changed.
+  ([#37](https://github.com/chaitanyakasaraneni/clinops/issues/37))
+- **Paper.** The statement of need cites work that supports it (patient leakage:
+  Saeb et al. 2017, Kapoor & Narayanan 2023), unsupported and mislabelled references
+  are removed, MIMIC-III, eICU-CRD, `monitor`, and `orchestrate` are described, the
+  test figures are current, and the example code, which did not run, is rewritten
+  and executed in CI on synthetic MIMIC-IV data.
+  ([#44](https://github.com/chaitanyakasaraneni/clinops/issues/44))
+- `ICDMapper` docs state the real size of the built-in table (63 mappings, not
+  ~3,000) and no longer claim Phecode or ICD-10 → ICD-9 mapping.
+  ([#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
+- `CITATION.cff` and `pyproject.toml` use the same keywords.
 - The getting-started walkthrough runs as written: it pivots `chartevents` to one
   column per vital before clipping, aligns each ICU stay to its own admission,
   windows per stay, attaches the outcome per admission, and splits by patient.
