@@ -153,12 +153,17 @@ tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
 charts = tbl.chartevents(item_ids=list(VITALS))
 stays, adm = tbl.icustays(), tbl.admissions()
 
-# Harmonise ICD-9 and ICD-10 diagnoses and add chapter labels
+# Harmonise ICD-9 and ICD-10 diagnoses into a new column and add chapter labels
+# (ICD-9 codes without a mapping are NaN and labelled "Unknown"; load the full
+# CMS GEM file with ICDMapper.from_gem_file() for complete coverage)
 mapper = ICDMapper()
 dx = mapper.harmonize(
-    tbl.diagnoses_icd(primary_only=True), code_col="icd_code", version_col="icd_version"
+    tbl.diagnoses_icd(primary_only=True),
+    code_col="icd_code",
+    version_col="icd_version",
+    output_col="icd10_code",
 )
-dx["chapter"] = mapper.chapter_series(dx["icd_code"])
+dx["chapter"] = mapper.chapter_series(dx["icd10_code"])
 
 # One column per vital sign, then clip physiologically impossible values
 vitals = (

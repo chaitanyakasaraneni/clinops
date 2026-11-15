@@ -292,11 +292,17 @@ class ICDMapper:
         icd10_value:
             Value in ``version_col`` indicating ICD-10 (default ``"10"``).
         output_col:
-            Column to write harmonized codes to. Defaults to ``code_col``.
+            Column to write harmonized codes to. Defaults to ``code_col``,
+            which overwrites the original codes; pass a new column name to
+            keep them.
 
         Returns
         -------
         pd.DataFrame
+            ICD-9 codes without a mapping become ``NaN`` in the output column,
+            and a warning reports how many. The built-in table covers only a
+            curated subset; load the full CMS GEM file with
+            :meth:`from_gem_file` for complete coverage.
         """
         df = df.copy()
         out_col = output_col or code_col
@@ -316,7 +322,16 @@ class ICDMapper:
             # output holds a code for every ICD-9 or ICD-10 row, not just ICD-9.
             df[out_col] = df[code_col].where(icd10_mask)
         if n_icd9 > 0:
-            df.loc[icd9_mask, out_col] = self.map_series(df.loc[icd9_mask, code_col]).values
+            mapped = self.map_series(df.loc[icd9_mask, code_col])
+            df.loc[icd9_mask, out_col] = mapped.values
+            n_unmapped = int(mapped.isna().sum())
+            if n_unmapped:
+                logger.warning(
+                    f"ICDMapper.harmonize: {n_unmapped:,} of {n_icd9:,} ICD-9 codes have no "
+                    f"mapping in this mapper ({self.n_mappings:,} mappings) and are NaN in "
+                    f"'{out_col}'. Load the full CMS GEM file with ICDMapper.from_gem_file() "
+                    "for complete coverage."
+                )
 
         return df
 
@@ -332,8 +347,11 @@ class ICDMapper:
         Returns
         -------
         str
-            Chapter description, or ``"Unknown"`` if code is out of range.
+            Chapter description, or ``"Unknown"`` if the code is missing or
+            out of range.
         """
+        if not isinstance(icd10_code, str):  # NaN / None, e.g. an unmapped ICD-9 code
+            return "Unknown"
         code = icd10_code.strip().upper()
         prefix = re.match(r"[A-Z]\d{2}", code)
         if not prefix:
@@ -346,7 +364,7 @@ class ICDMapper:
         return "Unknown"
 
     def chapter_series(self, series: pd.Series) -> pd.Series:
-        """Map a Series of ICD-10 codes to their chapter descriptions."""
+        """Map a Series of ICD-10 codes to chapter descriptions (``"Unknown"`` if missing)."""
         return series.apply(self.chapter)
 
     def describe(self, icd9_code: str) -> str:

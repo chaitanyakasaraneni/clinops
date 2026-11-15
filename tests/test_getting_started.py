@@ -106,8 +106,9 @@ def write_mimic(root: Path) -> None:
                 "subject_id": a["subject_id"],
                 "hadm_id": a["hadm_id"],
                 "seq_num": 1,
-                "icd_code": ["4280", "I509"][n % 2],
-                "icd_version": [9, 10][n % 2],
+                # Mapped ICD-9, ICD-10, and an ICD-9 code with no built-in mapping.
+                "icd_code": ["4280", "I509", "99999"][n % 3],
+                "icd_version": [9, 10, 9][n % 3],
             }
             for n, a in enumerate(admissions)
         ]
@@ -152,8 +153,14 @@ def test_paper_example_runs(mimic_root: Path) -> None:
     code = python_blocks(PAPER, "# Example Usage", "# Availability")
     ns = run(code, PAPER, mimic_root)
 
-    # Both ICD versions end up as ICD-10 with a chapter label.
-    assert ns["dx"]["chapter"].notna().all()
+    # Mapped ICD-9 and ICD-10 codes get their chapter; the unmapped ICD-9 code
+    # is kept in icd_code, is NaN in icd10_code, and is labelled "Unknown".
+    dx = ns["dx"].set_index("icd_code")
+    heart = "Diseases of the circulatory system"
+    assert set(dx.loc[["4280", "I509"], "chapter"]) == {heart}
+    assert dx.loc[["4280"], "icd10_code"].eq("I509").all()
+    assert dx.loc[["99999"], "icd10_code"].isna().all()
+    assert set(dx.loc[["99999"], "chapter"]) == {"Unknown"}
     windows, result = ns["windows"], ns["result"]
     assert set(windows["stay_id"]) == set(ns["stays"]["stay_id"])
     assert not set(result.train["subject_id"]) & set(result.test["subject_id"])
