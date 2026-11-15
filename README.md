@@ -144,7 +144,9 @@ No `ColumnSpec` definitions, no schema boilerplate.
 ```python
 from clinops.ingest import MimicTableLoader
 
-tbl = MimicTableLoader("/data/mimic-iv-2.2")
+# chunk_size streams chartevents/labevents and filters each chunk,
+# so the multi-GB tables never have to fit in memory
+tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
 
 # ICU vitals — charttime parsed as datetime automatically
 charts = tbl.chartevents(subject_ids=[10000032, 10000980])
@@ -376,12 +378,14 @@ enriched = LagFeatureBuilder(
 ```python
 from clinops.temporal import CohortAligner
 
+# One anchor per id: align on stay_id so patients with several ICU stays work
 aligned = CohortAligner(
     anchor_col="intime",
+    id_col="stay_id",
     max_hours_before=0,
     max_hours_after=48,
-).align(events_df=charts, anchor_df=stays)
-# → filtered to 48h post-admission, with hours_from_anchor column
+).align(events_df=charts, anchor_df=stays[["stay_id", "intime"]])
+# → filtered to 48h after each stay's admission, with hours_from_anchor column
 ```
 
 ### Imputation strategies
