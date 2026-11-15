@@ -150,15 +150,14 @@ class GCSPipelineStore:
             base prefix.
         """
         client = self._get_client()
-        base = f"{self.prefix}/{prefix}".strip("/")
-        blobs = client.list_blobs(self.bucket, prefix=base)
+        root = _root(self.prefix)
+        blobs = client.list_blobs(self.bucket, prefix=root + prefix.lstrip("/"))
         ext = f".{self.format}"
         names = []
         for blob in blobs:
             name = blob.name
-            if name.endswith(ext):
-                rel = name[len(self.prefix) :].lstrip("/").removesuffix(ext)
-                names.append(rel)
+            if name.startswith(root) and name.endswith(ext):
+                names.append(name[len(root) :].removesuffix(ext))
         return sorted(names)
 
     # ------------------------------------------------------------------
@@ -314,16 +313,15 @@ class S3PipelineStore:
             Artifact names (without file extension).
         """
         client = self._get_client()
-        base = f"{self.prefix}/{prefix}".strip("/")
+        root = _root(self.prefix)
         ext = f".{self.format}"
         paginator = client.get_paginator("list_objects_v2")
         names = []
-        for page in paginator.paginate(Bucket=self.bucket, Prefix=base):
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=root + prefix.lstrip("/")):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
-                if key.endswith(ext):
-                    rel = key[len(self.prefix) :].lstrip("/").removesuffix(ext)
-                    names.append(rel)
+                if key.startswith(root) and key.endswith(ext):
+                    names.append(key[len(root) :].removesuffix(ext))
         return sorted(names)
 
     # ------------------------------------------------------------------
@@ -362,3 +360,14 @@ class S3PipelineStore:
         if self.format == StorageFormat.PARQUET:
             return pd.read_parquet(buf)
         return pd.read_csv(buf)
+
+
+def _root(prefix: str) -> str:
+    """
+    The store's base prefix as a folder: ``"clinops"`` → ``"clinops/"``.
+
+    Object stores match prefixes as plain strings, so without the trailing slash
+    a store at ``clinops`` would also list objects under ``clinops-old/``.
+    """
+    prefix = prefix.strip("/")
+    return f"{prefix}/" if prefix else ""

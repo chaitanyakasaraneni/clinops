@@ -329,6 +329,21 @@ class TestPrescriptions:
     def test_filter_by_drug_case_insensitive(self, loader):
         assert len(loader.prescriptions(drugs=["heparin"])) == 1
 
+    def test_drug_names_matched_literally(self, mimic3_dir):
+        # Parentheses and "+" are part of real drug names, not regex syntax.
+        (mimic3_dir / "PRESCRIPTIONS.csv").write_text(
+            "SUBJECT_ID,HADM_ID,STARTDATE,ENDDATE,DRUG,DRUG_TYPE,DOSE_VAL_RX,DOSE_UNIT_RX\n"
+            "1,100,2150-01-01,2150-01-03,Heparin (Porcine),MAIN,5000,UNIT\n"
+            "1,100,2150-01-01,2150-01-03,Heparin Flush,MAIN,10,UNIT\n"
+            "2,200,2150-01-02,2150-01-04,Vitamin B12+Folate,MAIN,1,mg\n"
+        )
+        loader = MimicIIILoader(mimic3_dir)
+        assert loader.prescriptions(drugs=["heparin (porcine)"])["drug"].tolist() == [
+            "Heparin (Porcine)"
+        ]
+        assert len(loader.prescriptions(drugs=["B12+Folate"])) == 1
+        assert len(loader.prescriptions(drugs=["Heparin"])) == 2  # still a substring match
+
     def test_startdate_is_datetime(self, loader):
         assert pd.api.types.is_datetime64_any_dtype(loader.prescriptions()["startdate"])
 
