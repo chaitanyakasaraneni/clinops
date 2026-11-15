@@ -1,8 +1,9 @@
 """
 MIMIC-IV data loader with table-level validation and lazy loading.
 
-Supports MIMIC-IV v2.0, v2.1, and v2.2. Handles both the hosp and icu
-modules. Validates column presence, dtypes, and value ranges on load.
+Tested with MIMIC-IV v2.0, v2.1, and v2.2. Other versions are accepted and
+logged with a warning. Handles both the hosp and icu modules. Validates column
+presence, dtypes, and value ranges on load.
 
 Example
 -------
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +27,17 @@ import pandas as pd
 from clinops.ingest.schema import SchemaValidationError
 
 logger = logging.getLogger(__name__)
+
+# MIMIC-IV releases clinops is tested against. Other versions are accepted; the
+# version is metadata only and does not change how tables are read.
+_TESTED_VERSIONS = ("2.2", "2.1", "2.0")
+# The dataset directory names its release, e.g. "mimic-iv-2.2", "mimiciv_2.2",
+# "mimic4_v2.2", or "mimic-iv-clinical-database-demo-2.2" ...
+_VERSIONED_NAME = re.compile(r"mimic\S*?[-_ ]v?(\d+\.\d+)")
+# ... or, in PhysioNet's download layout (".../mimiciv/2.2"), is a bare version
+# directory inside a "mimiciv" one. A bare N.N anywhere else is not a version.
+_BARE_VERSION = re.compile(r"v?(\d+\.\d+)")
+_MIMIC_PARENT = re.compile(r"mimic[-_]?(?:iv|4)")
 
 # Tables large enough that chunk_size applies.
 _CHUNKED_TABLES = frozenset({"chartevents", "labevents"})
@@ -91,8 +104,11 @@ class MimicLoader:
         Root directory of the MIMIC-IV dataset. Should contain
         ``hosp/`` and ``icu/`` subdirectories.
     version:
-        MIMIC-IV version string (e.g. ``"2.2"``). Use ``"auto"`` to
-        detect from the directory structure.
+        MIMIC-IV version string (e.g. ``"2.2"``). ``"auto"`` (default) reads it
+        from the directory name, such as ``mimic-iv-2.2`` or PhysioNet's
+        ``mimiciv/2.2``. clinops is tested with 2.0 to 2.2; other versions
+        are accepted with a warning. The version is recorded, not used to
+        change how tables are read.
     strict_validation:
         If True (default), raise ``SchemaValidationError`` when required
         columns are missing. If False, log a warning and continue.
@@ -124,6 +140,11 @@ class MimicLoader:
             chunk_size=chunk_size,
         )
         self._version = self._detect_version() if version == "auto" else version
+        if self._version not in _TESTED_VERSIONS:
+            logger.warning(
+                f"MIMIC-IV {self._version} has not been tested with clinops "
+                f"(tested: {', '.join(_TESTED_VERSIONS)}); check that tables load as expected"
+            )
         logger.info(
             f"MimicLoader initialised — path={self._cfg.mimic_path}, version={self._version}"
         )
@@ -244,11 +265,21 @@ class MimicLoader:
     # ------------------------------------------------------------------
 
     def _detect_version(self) -> str:
-        """Attempt to infer MIMIC-IV version from directory name or files."""
-        path_str = str(self._cfg.mimic_path).lower()
-        for v in ["2.2", "2.1", "2.0"]:
-            if v in path_str:
-                return v
+        """
+        Infer the MIMIC-IV version from the dataset directory's name.
+
+        Only the directory passed as ``mimic_path`` (the one containing ``hosp/``
+        and ``icu/``) is considered, plus its parent for PhysioNet's
+        ``mimiciv/<version>`` layout, so unrelated folders such as
+        ``/data/2024.01/`` are never read as a version.
+        """
+        path = self._cfg.mimic_path.resolve()
+        name, parent = path.name.lower(), path.parent.name.lower()
+        match = _VERSIONED_NAME.fullmatch(name)
+        if match is None and _MIMIC_PARENT.fullmatch(parent):
+            match = _BARE_VERSION.fullmatch(name)
+        if match:
+            return match.group(1)
         logger.warning("Could not detect MIMIC-IV version from path; assuming 2.2")
         return "2.2"
 
