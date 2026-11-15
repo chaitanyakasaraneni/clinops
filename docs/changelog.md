@@ -31,8 +31,11 @@ feedback.
   `vitals.2024-01.parquet`); they were read as CSV and failed.
 - `MimicIIILoader.prescriptions(drugs=...)` matches drug names literally, so names
   with parentheses or `+` work instead of matching nothing or raising.
-- `GCSPipelineStore` / `S3PipelineStore.list_artifacts()` no longer list objects from
-  a sibling prefix (a store at `clinops` listed `clinops-old/...` as `-old/...`).
+- `GCSPipelineStore` / `S3PipelineStore.list_artifacts()` treat the store prefix and
+  the `prefix` argument as folders: a store at `clinops` no longer lists
+  `clinops-old/...` (as `-old/...`), and `list_artifacts("features")` no longer
+  includes `features-old/...`. A store prefix with a leading slash now lists the
+  artifacts it uploaded.
 
 ### Documentation
 

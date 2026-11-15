@@ -141,7 +141,9 @@ class GCSPipelineStore:
         Parameters
         ----------
         prefix:
-            Sub-prefix to filter by (relative to the store's base prefix).
+            Sub-folder to list (relative to the store's base prefix), e.g.
+            ``"features"`` lists ``features/...`` and an artifact named
+            ``features``, but not ``features-old/...``.
 
         Returns
         -------
@@ -151,14 +153,14 @@ class GCSPipelineStore:
         """
         client = self._get_client()
         root = _root(self.prefix)
-        blobs = client.list_blobs(self.bucket, prefix=root + prefix.lstrip("/"))
+        blobs = client.list_blobs(self.bucket, prefix=root + prefix.strip("/"))
         ext = f".{self.format}"
         names = []
         for blob in blobs:
             name = blob.name
             if name.startswith(root) and name.endswith(ext):
                 names.append(name[len(root) :].removesuffix(ext))
-        return sorted(names)
+        return _in_folder(names, prefix)
 
     # ------------------------------------------------------------------
     # Internal
@@ -305,7 +307,9 @@ class S3PipelineStore:
         Parameters
         ----------
         prefix:
-            Sub-prefix to filter by (relative to the store's base prefix).
+            Sub-folder to list (relative to the store's base prefix), e.g.
+            ``"features"`` lists ``features/...`` and an artifact named
+            ``features``, but not ``features-old/...``.
 
         Returns
         -------
@@ -317,12 +321,12 @@ class S3PipelineStore:
         ext = f".{self.format}"
         paginator = client.get_paginator("list_objects_v2")
         names = []
-        for page in paginator.paginate(Bucket=self.bucket, Prefix=root + prefix.lstrip("/")):
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=root + prefix.strip("/")):
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 if key.startswith(root) and key.endswith(ext):
                     names.append(key[len(root) :].removesuffix(ext))
-        return sorted(names)
+        return _in_folder(names, prefix)
 
     # ------------------------------------------------------------------
     # Internal
@@ -367,7 +371,22 @@ def _root(prefix: str) -> str:
     The store's base prefix as a folder: ``"clinops"`` → ``"clinops/"``.
 
     Object stores match prefixes as plain strings, so without the trailing slash
-    a store at ``clinops`` would also list objects under ``clinops-old/``.
+    a store at ``clinops`` would also list objects under ``clinops-old/``. A
+    leading slash is kept, because ``upload()`` writes keys with it.
     """
-    prefix = prefix.strip("/")
+    prefix = prefix.rstrip("/")
     return f"{prefix}/" if prefix else ""
+
+
+def _in_folder(names: list[str], prefix: str) -> list[str]:
+    """
+    Keep artifact names inside the sub-folder ``prefix``, sorted.
+
+    The object-store query matches ``prefix`` as a plain string, so ``"features"``
+    also returns ``features-old/...``; only ``features`` itself and names under
+    ``features/`` are kept.
+    """
+    folder = prefix.strip("/")
+    if not folder:
+        return sorted(names)
+    return sorted(n for n in names if n == folder or n.startswith(f"{folder}/"))

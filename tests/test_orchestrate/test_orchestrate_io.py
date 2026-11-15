@@ -150,6 +150,32 @@ class TestGCSPipelineStoreIO:
         assert store.list_artifacts() == ["features/a", "features/b", "labels"]
         assert store.list_artifacts("features") == ["features/a", "features/b"]
 
+    @pytest.mark.parametrize("store_cls", ["gcs", "s3"])
+    def test_sub_prefix_is_a_folder(self, store_cls):
+        if store_cls == "gcs":
+            store = GCSPipelineStore("bkt", prefix="clinops")
+            store._client = FakeGCSClient()
+        else:
+            store = S3PipelineStore("bkt", prefix="clinops")
+            store._client = FakeS3Client()
+        for name in ("features", "features/a", "features-old/b", "featuresx"):
+            store.upload(make_df(), name)
+        assert store.list_artifacts("features") == ["features", "features/a"]
+        assert store.list_artifacts("features/") == ["features", "features/a"]
+        assert store.list_artifacts() == ["features", "features-old/b", "features/a", "featuresx"]
+
+    @pytest.mark.parametrize("store_cls", ["gcs", "s3"])
+    def test_leading_slash_prefix_round_trips(self, store_cls):
+        if store_cls == "gcs":
+            store = GCSPipelineStore("bkt", prefix="/clinops/")
+            store._client = FakeGCSClient()
+        else:
+            store = S3PipelineStore("bkt", prefix="/clinops/")
+            store._client = FakeS3Client()
+        store.upload(make_df(), "features/a")
+        assert store.list_artifacts() == ["features/a"]
+        pd.testing.assert_frame_equal(store.download("features/a"), make_df())
+
     def test_list_artifacts_ignores_sibling_prefix(self):
         client = FakeGCSClient()
         store = GCSPipelineStore("bkt", prefix="clinops")
