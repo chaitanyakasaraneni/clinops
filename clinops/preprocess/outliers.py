@@ -52,7 +52,7 @@ class BoundSpec:
 VITAL_BOUNDS: dict[str, BoundSpec] = {
     "heart_rate": BoundSpec("heart_rate", 0, 300, "bpm", "Asystole to extreme tachycardia"),
     "resp_rate": BoundSpec("resp_rate", 0, 80, "breaths/min", "Apnoea to extreme tachypnoea"),
-    "spo2": BoundSpec("spo2", 50, 100, "%", "Incompatible with life below 50%"),
+    "spo2": BoundSpec("spo2", 50, 100, "%", "Readings below 50% treated as artefact"),
     "sbp": BoundSpec("sbp", 0, 300, "mmHg", "Systolic blood pressure"),
     "dbp": BoundSpec("dbp", 0, 200, "mmHg", "Diastolic blood pressure"),
     "map": BoundSpec("map", 0, 250, "mmHg", "Mean arterial pressure"),
@@ -69,7 +69,7 @@ LAB_BOUNDS: dict[str, BoundSpec] = {
     # Metabolic
     "glucose": BoundSpec("glucose", 0, 2000, "mg/dL", "Hypoglycaemia to extreme hyperglycaemia"),
     "glucose_mmol": BoundSpec("glucose_mmol", 0, 111, "mmol/L", "mmol/L equivalent"),
-    "sodium": BoundSpec("sodium", 90, 200, "mEq/L", "Compatible with life"),
+    "sodium": BoundSpec("sodium", 90, 200, "mEq/L", "Values outside 90–200 treated as errors"),
     "potassium": BoundSpec("potassium", 1.0, 10.0, "mEq/L", "Severe hypo- to hyperkalaemia"),
     "chloride": BoundSpec("chloride", 60, 150, "mEq/L"),
     "bicarbonate": BoundSpec("bicarbonate", 0, 60, "mEq/L"),
@@ -91,7 +91,7 @@ LAB_BOUNDS: dict[str, BoundSpec] = {
     "pt": BoundSpec("pt", 0, 200, "seconds"),
     "ptt": BoundSpec("ptt", 0, 400, "seconds"),
     # ABG
-    "ph": BoundSpec("ph", 6.5, 7.9, "pH", "Arterial pH — incompatible outside this range"),
+    "ph": BoundSpec("ph", 6.5, 7.9, "pH", "Arterial pH; values outside 6.5–7.9 treated as errors"),
     "pao2": BoundSpec("pao2", 0, 700, "mmHg", "PaO2 on 100% O2"),
     "paco2": BoundSpec("paco2", 0, 150, "mmHg"),
     "lactate": BoundSpec("lactate", 0, 30, "mmol/L"),

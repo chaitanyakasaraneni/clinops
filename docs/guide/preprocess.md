@@ -43,7 +43,7 @@ These are plausibility limits, not reference ranges: wide bounds outside which a
 |---|---|---|---|---|---|
 | `heart_rate` | vital | 0 | 300 | bpm | Asystole to extreme tachycardia |
 | `resp_rate` | vital | 0 | 80 | breaths/min | Apnoea to extreme tachypnoea |
-| `spo2` | vital | 50 | 100 | % | Incompatible with life below 50% |
+| `spo2` | vital | 50 | 100 | % | Readings below 50% treated as artefact |
 | `sbp` | vital | 0 | 300 | mmHg | Systolic blood pressure |
 | `dbp` | vital | 0 | 200 | mmHg | Diastolic blood pressure |
 | `map` | vital | 0 | 250 | mmHg | Mean arterial pressure |
@@ -55,7 +55,7 @@ These are plausibility limits, not reference ranges: wide bounds outside which a
 | `gcs` | vital | 3 | 15 | score | Glasgow Coma Scale: 3 (worst) to 15 (normal) |
 | `glucose` | lab | 0 | 2000 | mg/dL | Hypoglycaemia to extreme hyperglycaemia |
 | `glucose_mmol` | lab | 0 | 111 | mmol/L | mmol/L equivalent |
-| `sodium` | lab | 90 | 200 | mEq/L | Compatible with life |
+| `sodium` | lab | 90 | 200 | mEq/L | Values outside 90–200 treated as errors |
 | `potassium` | lab | 1 | 10 | mEq/L | Severe hypo- to hyperkalaemia |
 | `chloride` | lab | 60 | 150 | mEq/L |  |
 | `bicarbonate` | lab | 0 | 60 | mEq/L |  |
@@ -74,7 +74,7 @@ These are plausibility limits, not reference ranges: wide bounds outside which a
 | `inr` | lab | 0 | 20 | ratio |  |
 | `pt` | lab | 0 | 200 | seconds |  |
 | `ptt` | lab | 0 | 400 | seconds |  |
-| `ph` | lab | 6.5 | 7.9 | pH | Arterial pH — incompatible outside this range |
+| `ph` | lab | 6.5 | 7.9 | pH | Arterial pH; values outside 6.5–7.9 treated as errors |
 | `pao2` | lab | 0 | 700 | mmHg | PaO2 on 100% O2 |
 | `paco2` | lab | 0 | 150 | mmHg |  |
 | `lactate` | lab | 0 | 30 | mmol/L |  |
