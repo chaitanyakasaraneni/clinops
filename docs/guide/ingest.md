@@ -164,6 +164,28 @@ value would also appear in the observation window as a feature. Set
 `label_mode="locf"` only to reproduce results from clinops 0.5.0 or earlier,
 which evaluated the criteria on the forward-filled grid.
 
+### Vasopressor flag
+
+`vasopressor_flag` marks the hours a vasopressor (norepinephrine, epinephrine,
+phenylephrine, vasopressin, or dopamine) was running. By default
+(`vasopressor_source="infusion"`) it comes from charted infusion rates in
+`infusionDrug`: an hour is flagged while an infusion runs at a rate above zero.
+A charted rate holds until that drug's next charting, for at most 4 hours (in
+the eICU-CRD demo, half of consecutive chartings are 60 minutes apart and 90%
+are at most 200 minutes apart).
+
+Stays at hospitals that chart no infusions fall back to `medication`. That table
+holds *orders*, not administrations, and about 40% of its rows have no
+`drugname`, only a `drughiclseqno` drug code, so the fallback matches orders by
+name or by a code that carries only vasopressor names, and skips cancelled,
+as-needed (PRN), and one-time orders and non-systemic products such as
+lidocaine-epinephrine.
+
+`vasopressor_source="medication_name"` reproduces clinops 0.6 and earlier: any
+`medication` order whose name contains a vasopressor keyword, over its order
+interval. On the eICU-CRD demo it flagged only 36% of the stays with a charted
+vasopressor infusion.
+
 ---
 
 ## FlatFileLoader

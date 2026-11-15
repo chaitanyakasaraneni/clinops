@@ -34,8 +34,13 @@ Key eICU schema facts (verified against an eICU-CRD v2.0 download, not docs):
   :mod:`clinops.ingest.mappings.eicu_lab_map`.
 - GCS is in ``nurseCharting`` under category ``Scores`` /
   ``Glasgow coma score`` (valname ``GCS Total``), **not** in ``lab``.
-- Vasopressor use is inferred from free-text ``medication.drugname``; mechanical
-  ventilation from ``respiratoryCare`` vent offsets / the ``treatment`` table.
+- Vasopressor use comes from charted infusion rates in ``infusionDrug`` (see
+  ``EicuCohortConfig.vasopressor_source``). ``medication`` holds *orders*, not
+  administrations, and about 40% of its rows have no ``drugname`` (only a
+  ``drughiclseqno`` drug code), so it is used only as a fallback for hospitals
+  that do not chart infusions. Mechanical ventilation comes from
+  ``respiratoryCare`` vent offsets; renal replacement from the ``treatment``
+  table and medication text.
 - DNR / care-limitation status lives in ``carePlanGeneral`` (``cplgroup ==
   'Care Limitation'``), **not** in the ``diagnosis`` table.
 
@@ -57,7 +62,9 @@ available multi-center database for critical care research. Sci Data 5, 180178
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import re
+import warnings
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -70,6 +77,9 @@ from clinops.ingest.schema import LeakageError, SchemaValidationError
 
 logger = logging.getLogger(__name__)
 
+#: A per-chunk row filter, ``(chunk) -> chunk``, applied while reading large tables.
+RowFilter = Callable[[pd.DataFrame], pd.DataFrame]
+
 # ---------------------------------------------------------------------------
 # Table registry — filenames and minimum required columns
 # ---------------------------------------------------------------------------
@@ -81,6 +91,7 @@ _TABLE_STEMS: dict[str, str] = {
     "vital_aperiodic": "vitalAperiodic",
     "lab": "lab",
     "medication": "medication",
+    "infusion_drug": "infusionDrug",
     "nurse_charting": "nurseCharting",
     "diagnosis": "diagnosis",
     "apache_patient_result": "apachePatientResult",
@@ -103,6 +114,7 @@ _REQUIRED_COLS: dict[str, list[str]] = {
     "vital_aperiodic": ["patientunitstayid", "observationoffset"],
     "lab": ["patientunitstayid", "labresultoffset", "labname", "labresult"],
     "medication": ["patientunitstayid", "drugstartoffset", "drugname"],
+    "infusion_drug": ["patientunitstayid", "infusionoffset", "drugname", "drugrate"],
     "nurse_charting": [
         "patientunitstayid",
         "nursingchartoffset",
@@ -203,11 +215,27 @@ class EicuLoader:
     # -- public table accessors --------------------------------------------
 
     def load_patient(self) -> pd.DataFrame:
-        """Load ``patient`` (one row per ICU stay). Small table — read whole."""
+        """
+        Load ``patient`` (one row per ICU stay). Small table, read whole.
+
+        Returns
+        -------
+        pd.DataFrame
+            Includes ``patientunitstayid``, ``uniquepid``, ``hospitalid``,
+            ``age`` (a string; see :func:`parse_eicu_age`), and
+            ``unitdischargeoffset``.
+        """
         return self._load_small("patient")
 
     def load_diagnosis(self, patient_unit_stay_ids: Sequence[int] | None = None) -> pd.DataFrame:
-        """Load ``diagnosis`` (free-text + ICD-9). Small table — read whole."""
+        """
+        Load ``diagnosis`` (free-text diagnosis strings and ICD-9 codes).
+
+        Parameters
+        ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays. ``None`` (default) returns all stays.
+        """
         df = self._load_small("diagnosis")
         return self._filter_stays(df, patient_unit_stay_ids)
 
@@ -222,7 +250,7 @@ class EicuLoader:
         Parameters
         ----------
         patient_unit_stay_ids:
-            Restrict to these ICU stays (pushed down per chunk).
+            Restrict to these ICU stays (applied to each chunk).
         columns:
             Subset of columns to read (``usecols``) — cuts memory and time on
             this wide table. ``patientunitstayid`` and ``observationoffset`` are
@@ -235,7 +263,17 @@ class EicuLoader:
         patient_unit_stay_ids: Sequence[int] | None = None,
         columns: Sequence[str] | None = None,
     ) -> pd.DataFrame:
-        """Load ``vitalAperiodic`` (non-invasive BP etc.). Chunked read."""
+        """
+        Load ``vitalAperiodic`` (non-invasive blood pressure etc.). Chunked read.
+
+        Parameters
+        ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays (applied to each chunk).
+        columns:
+            Subset of columns to read. ``patientunitstayid`` and
+            ``observationoffset`` are always included.
+        """
         return self._load_large("vital_aperiodic", patient_unit_stay_ids, columns=columns)
 
     def load_lab(
@@ -248,6 +286,8 @@ class EicuLoader:
 
         Parameters
         ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays (applied to each chunk).
         labnames:
             If given, keep only these raw ``labname`` values (case-insensitive),
             applied per chunk to avoid materialising unrelated labs.
@@ -265,8 +305,37 @@ class EicuLoader:
         self,
         patient_unit_stay_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
-        """Load ``medication`` (free-text drug orders). Chunked read."""
+        """
+        Load ``medication`` (drug *orders*, not administrations). Chunked read.
+
+        About 40% of rows have no ``drugname`` and identify the drug only by
+        its ``drughiclseqno`` code; ``drugordercancelled`` marks cancelled
+        orders.
+
+        Parameters
+        ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays (applied to each chunk).
+        """
         return self._load_large("medication", patient_unit_stay_ids)
+
+    def load_infusion_drug(
+        self,
+        patient_unit_stay_ids: Sequence[int] | None = None,
+    ) -> pd.DataFrame:
+        """
+        Load ``infusionDrug`` (charted continuous-infusion rates). Chunked read.
+
+        Each row is one charting of an infusion: ``drugname`` (e.g.
+        ``"Norepinephrine (mcg/min)"``), ``drugrate`` (a string; numeric for most
+        rows), and ``infusionoffset`` in minutes from ICU admission.
+
+        Parameters
+        ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays (applied to each chunk).
+        """
+        return self._load_large("infusion_drug", patient_unit_stay_ids)
 
     def load_nurse_charting(
         self,
@@ -278,6 +347,8 @@ class EicuLoader:
 
         Parameters
         ----------
+        patient_unit_stay_ids:
+            Restrict to these ICU stays (applied to each chunk).
         categories:
             If given, keep only rows whose ``nursingchartcelltypecat`` is in
             this set (e.g. ``["Scores"]`` for GCS). Applied per chunk.
@@ -295,10 +366,18 @@ class EicuLoader:
 
     def _resolve_path(self, table: str) -> Path:
         stem = _TABLE_STEMS[table]
-        for ext in (".csv", ".csv.gz", ".parquet"):
-            candidate = self._cfg.data_dir / f"{stem}{ext}"
+        names = [f"{stem}{ext}" for ext in (".csv", ".csv.gz", ".parquet")]
+        for name in names:
+            candidate = self._cfg.data_dir / name
             if candidate.exists():
                 return candidate
+        # File-name case differs between releases (the demo ships "infusiondrug",
+        # the full release "infusionDrug"); match case-insensitively so this also
+        # works on case-sensitive file systems.
+        by_lower = {f.name.lower(): f for f in self._cfg.data_dir.iterdir() if f.is_file()}
+        for name in names:
+            if name.lower() in by_lower:
+                return by_lower[name.lower()]
         raise FileNotFoundError(
             f"eICU table '{table}' ({stem}) not found in {self._cfg.data_dir}. "
             f"Expected one of: {stem}.csv, {stem}.csv.gz, {stem}.parquet"
@@ -330,7 +409,7 @@ class EicuLoader:
         table: str,
         patient_unit_stay_ids: Sequence[int] | None = None,
         columns: Sequence[str] | None = None,
-        extra_filter: object | None = None,
+        extra_filter: RowFilter | None = None,
     ) -> pd.DataFrame:
         """
         Chunked read of a large table with optional stay/row filtering.
@@ -397,21 +476,21 @@ class EicuLoader:
     def _apply_chunk_filters(
         chunk: pd.DataFrame,
         stay_set: set[int] | None,
-        extra_filter: object | None,
+        extra_filter: RowFilter | None,
     ) -> pd.DataFrame:
         if stay_set is not None and "patientunitstayid" in chunk.columns:
             chunk = chunk[chunk["patientunitstayid"].isin(stay_set)]
         if extra_filter is not None and len(chunk):
-            chunk = extra_filter(chunk)  # type: ignore[operator]
+            chunk = extra_filter(chunk)
         return chunk
 
-    @staticmethod
+    @classmethod
     def _filter_stays(
-        df: pd.DataFrame, patient_unit_stay_ids: Sequence[int] | None
+        cls, df: pd.DataFrame, patient_unit_stay_ids: Sequence[int] | None
     ) -> pd.DataFrame:
-        if patient_unit_stay_ids is not None and "patientunitstayid" in df.columns:
-            df = df[df["patientunitstayid"].isin(set(patient_unit_stay_ids))]
-        return df.reset_index(drop=True)
+        """Whole-table version of the per-chunk stay filter."""
+        stay_set = set(patient_unit_stay_ids) if patient_unit_stay_ids is not None else None
+        return cls._apply_chunk_filters(df, stay_set, None).reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
@@ -534,8 +613,28 @@ LEAKAGE_FORBIDDEN: frozenset[str] = frozenset(
     }
 )
 
-#: Substrings used to infer vasopressor administration from free-text drug
-#: names (case-insensitive). Verified against real eICU ``medication.drugname``.
+#: Vasopressor drug names, matched as whole words so "epinephrine" does not match
+#: "racepinephrine". Brand names map to the generic drug.
+_VASOPRESSOR_NAME = re.compile(
+    r"\b(norepinephrine|levophed|epinephrine|adrenalin|phenylephrine|neo-?synephrine"
+    r"|vasopressin|dopamine)\b",
+    re.IGNORECASE,
+)
+_VASOPRESSOR_BRANDS = {"levophed": "norepinephrine", "adrenalin": "epinephrine"}
+#: Orders whose name contains a vasopressor but which are not systemic vasopressor
+#: therapy: local-anaesthetic combinations, eye and nasal drops, inhaled forms.
+_NOT_VASOPRESSOR_THERAPY = re.compile(
+    r"lidocaine|bupivacaine|ropivacaine|articaine|prilocaine|cyclopentolate|tropicamide"
+    r"|ophth|nasal|inhal|\bneb",
+    re.IGNORECASE,
+)
+#: A charted infusion rate counts as running until the drug's next charting, but
+#: for at most this long. In the eICU-CRD demo, half of consecutive chartings of a
+#: running vasopressor are 60 minutes apart and 90% are at most 200 minutes apart.
+_INFUSION_MAX_GAP_MINUTES = 240
+
+#: Legacy (``vasopressor_source="medication_name"``): substrings of
+#: ``medication.drugname`` (case-insensitive), the rule of clinops <= 0.6.
 _VASOPRESSOR_KEYWORDS: tuple[str, ...] = (
     "norepinephrine",
     "epinephrine",  # also matches norepinephrine; harmless for a boolean flag
@@ -594,7 +693,9 @@ class EicuCohortConfig(BaseModel):
         Optional cap on the number of cohort stays (development / testing on a
         subset). ``None`` (default) uses the full cohort.
     random_state:
-        Seed for any sampling. Default 42.
+        Deprecated and unused: cohort construction involves no random sampling
+        (``limit_stays`` keeps the first stays). Setting it emits a
+        ``DeprecationWarning``; it will be removed in a future release.
     label_mode:
         How organ labels treat carried-forward values. ``"observed"`` (default)
         marks an hour positive only when the variable that triggers the
@@ -604,6 +705,21 @@ class EicuCohortConfig(BaseModel):
         may still be carried forward. ``"locf"`` evaluates the criteria on the
         forward-filled grid, the behaviour of clinops <= 0.5.0; use it only to
         reproduce results produced with that definition.
+    vasopressor_source:
+        Where ``vasopressor_flag`` comes from. ``"infusion"`` (default) uses
+        charted vasopressor infusion rates in ``infusionDrug``: an hour is
+        flagged while a norepinephrine, epinephrine, phenylephrine,
+        vasopressin, or dopamine infusion runs at a rate above zero (a charted
+        rate holds until the drug's next charting, for at most 4 hours). Stays
+        at hospitals that chart no infusions fall back to ``medication``
+        orders, matched by drug name or ``drughiclseqno`` code, skipping
+        cancelled, as-needed (PRN), and one-time orders and non-systemic
+        products such as lidocaine-epinephrine. ``"medication_name"`` is the
+        rule of clinops <= 0.6: any ``medication`` order whose name contains a
+        vasopressor keyword, over its order interval. On the eICU-CRD demo it
+        caught only about a third of the stays with a charted vasopressor
+        infusion, because ~40% of ``medication`` rows have no name; use it only
+        to reproduce earlier results.
     """
 
     min_age: int = 18
@@ -619,9 +735,17 @@ class EicuCohortConfig(BaseModel):
     limit_stays: int | None = None
     random_state: int = 42
     label_mode: Literal["observed", "locf"] = "observed"
+    vasopressor_source: Literal["infusion", "medication_name"] = "infusion"
 
     @model_validator(mode="after")
     def _check_consistency(self) -> EicuCohortConfig:
+        if "random_state" in self.model_fields_set:
+            warnings.warn(
+                "EicuCohortConfig.random_state is unused and deprecated; cohort "
+                "construction involves no random sampling.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         positive = {
             "min_age": self.min_age,
             "min_los_hours": self.min_los_hours,
@@ -755,7 +879,11 @@ class EicuTableLoader:
         if dnr_stays:
             before = len(pt)
             pt = pt[~pt["patientunitstayid"].isin(dnr_stays)]
-            logger.info("Cohort: DNR<=6h excluded %d stays", before - len(pt))
+            logger.info(
+                "Cohort: DNR<=%dh excluded %d stays",
+                self._cfg.dnr_window_hours,
+                before - len(pt),
+            )
 
         if self._cfg.limit_stays is not None:
             pt = pt.head(self._cfg.limit_stays)
@@ -970,21 +1098,120 @@ class EicuTableLoader:
         out[flag_name] = 1
         return out
 
+    def _hourly_vasopressors(self, stay_ids: list[int], med: pd.DataFrame) -> pd.DataFrame:
+        """Per-(stay, hour) ``vasopressor_flag`` from the configured source."""
+        if self._cfg.vasopressor_source == "medication_name":
+            return self._legacy_vasopressor_orders(med)
+
+        try:
+            inf = self._loader.load_infusion_drug(patient_unit_stay_ids=stay_ids)
+        except FileNotFoundError:
+            logger.warning("infusionDrug not found; vasopressor flag uses medication orders")
+            inf = pd.DataFrame(columns=["patientunitstayid"])
+
+        # Hospitals that chart infusions use them exclusively; the rest fall back
+        # to medication orders.
+        cohort = self.build_cohort()
+        charted = set(inf["patientunitstayid"])
+        if "hospitalid" in cohort.columns:
+            charting_hospitals = set(
+                cohort.loc[cohort["patientunitstayid"].isin(charted), "hospitalid"]
+            )
+            uses_infusion = cohort["hospitalid"].isin(charting_hospitals)
+        else:
+            uses_infusion = cohort["patientunitstayid"].isin(charted)
+        fallback = set(cohort.loc[~uses_infusion, "patientunitstayid"])
+        if fallback:
+            logger.info(
+                "Vasopressors: %d stays at hospitals without infusion charting use "
+                "medication orders",
+                len(fallback),
+            )
+        frames = [
+            self._vasopressor_infusions(inf),
+            self._vasopressor_orders(med[med["patientunitstayid"].isin(fallback)]),
+        ]
+        frames = [f for f in frames if len(f)]
+        if not frames:
+            return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
+        return pd.concat(frames, ignore_index=True).drop_duplicates(["patientunitstayid", "hour"])
+
+    def _vasopressor_infusions(self, inf: pd.DataFrame) -> pd.DataFrame:
+        """Hours with a vasopressor infusion charted at a rate above zero."""
+        if inf.empty or "drugname" not in inf.columns:
+            return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
+        drug = inf["drugname"].fillna("").str.extract(_VASOPRESSOR_NAME, expand=False)
+        v = inf.assign(
+            drug=drug.str.lower().replace(_VASOPRESSOR_BRANDS),
+            rate=pd.to_numeric(inf["drugrate"], errors="coerce"),
+            start=pd.to_numeric(inf["infusionoffset"], errors="coerce"),
+        )
+        v = v[v["drug"].notna() & v["start"].notna()].sort_values(
+            ["patientunitstayid", "drug", "start"]
+        )
+        # A charting holds until the same drug's next charting, at most the cap.
+        nxt = v.groupby(["patientunitstayid", "drug"])["start"].shift(-1)
+        end = np.minimum(nxt.fillna(np.inf), v["start"] + _INFUSION_MAX_GAP_MINUTES)
+        v = v.assign(stop=np.maximum(end - 1, v["start"]))
+        running = v[v["rate"] > 0]
+        return self._interval_flag(running, "start", "stop", "vasopressor_flag")
+
+    def _vasopressor_orders(self, med: pd.DataFrame) -> pd.DataFrame:
+        """
+        Fallback: vasopressor ``medication`` orders over their order interval.
+
+        An order counts when its name is a vasopressor or, for the ~40% of rows
+        without a name, its ``drughiclseqno`` is a code that only ever carries
+        vasopressor names in this data. Cancelled, as-needed (PRN), one-time, and
+        non-systemic orders are skipped.
+        """
+        if med.empty:
+            return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
+        name = med["drugname"].fillna("")
+        is_vaso_name = name.str.extract(_VASOPRESSOR_NAME, expand=False).notna() & ~(
+            name.str.contains(_NOT_VASOPRESSOR_THERAPY)
+        )
+        code = med.get("drughiclseqno", pd.Series(np.nan, index=med.index))
+        named = name.ne("")
+        vaso_codes = set(code[named & is_vaso_name].dropna()) - set(
+            code[named & ~is_vaso_name].dropna()
+        )
+        is_vaso = is_vaso_name | (~named & code.isin(vaso_codes))
+
+        def text(col: str) -> pd.Series:
+            if col not in med.columns:
+                return pd.Series("", index=med.index)
+            return med[col].fillna("").astype(str).str.strip().str.upper()
+
+        given = (
+            text("drugordercancelled").ne("YES")
+            & text("prn").ne("YES")
+            & ~text("frequency").str.contains(r"\bONCE\b", regex=True)
+        )
+        return self._interval_flag(
+            med[is_vaso & given], "drugstartoffset", "drugstopoffset", "vasopressor_flag"
+        )
+
+    def _legacy_vasopressor_orders(self, med: pd.DataFrame) -> pd.DataFrame:
+        """``vasopressor_source="medication_name"``: the clinops <= 0.6 rule."""
+        if med.empty:
+            return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
+        name = med["drugname"].astype(str).str.lower()
+        mask = pd.Series(False, index=med.index)
+        for kw in _VASOPRESSOR_KEYWORDS:
+            mask |= name.str.contains(kw, na=False)
+        return self._interval_flag(
+            med[mask], "drugstartoffset", "drugstopoffset", "vasopressor_flag"
+        )
+
     def _hourly_treatments(self, stay_ids: list[int]) -> pd.DataFrame:
         """Per-(stay, hour) vasopressor, mechanical-ventilation, and RRT flags."""
         frames: list[pd.DataFrame] = []
 
-        # Vasopressors from medication free text.
         med = self._loader.load_medication(patient_unit_stay_ids=stay_ids)
+        frames.append(self._hourly_vasopressors(stay_ids, med))
         if not med.empty:
             name = med["drugname"].astype(str).str.lower()
-            mask = pd.Series(False, index=med.index)
-            for kw in _VASOPRESSOR_KEYWORDS:
-                mask |= name.str.contains(kw, na=False)
-            vaso = med[mask]
-            frames.append(
-                self._interval_flag(vaso, "drugstartoffset", "drugstopoffset", "vasopressor_flag")
-            )
             # RRT can also appear as a drug order.
             rrt_mask = pd.Series(False, index=med.index)
             for kw in _RRT_KEYWORDS:
@@ -1268,7 +1495,7 @@ class EicuTableLoader:
             return self._build_sequences_impl()
 
         saved_cfg = self._cfg
-        self._cfg = EicuCohortConfig(**{**saved_cfg.model_dump(), **overrides})
+        self._cfg = EicuCohortConfig(**{**saved_cfg.model_dump(exclude_unset=True), **overrides})
         try:
             return self._build_sequences_impl()
         finally:

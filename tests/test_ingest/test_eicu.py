@@ -686,3 +686,160 @@ def test_observed_flags_not_in_outputs(eicu_dir: Path):
 def test_invalid_label_mode_rejected():
     with pytest.raises(ValueError):
         EicuCohortConfig(label_mode="carry")
+
+
+# ---------------------------------------------------------------------------
+# vasopressor_source: infusionDrug by default, medication orders as fallback
+# ---------------------------------------------------------------------------
+
+# Hospitals in the fixture are 100 + stay % 3: 201 -> 100, 301 -> 101, 101/401 -> 102.
+
+
+def _write_infusions(eicu_dir: Path, rows: list[tuple[int, int, str, str]]) -> None:
+    pd.DataFrame(
+        [
+            {
+                "infusiondrugid": i,
+                "patientunitstayid": stay,
+                "infusionoffset": offset,
+                "drugname": name,
+                "drugrate": rate,
+                "infusionrate": "",
+                "drugamount": "",
+                "volumeoffluid": "",
+                "patientweight": 80,
+            }
+            for i, (stay, offset, name, rate) in enumerate(rows)
+        ]
+    ).to_csv(eicu_dir / "infusiondrug.csv", index=False)  # lowercase, as in the demo
+
+
+def _write_orders(eicu_dir: Path, rows: list[dict]) -> None:
+    base = {
+        "drugorderoffset": 60,
+        "drugstartoffset": 60,
+        "drugstopoffset": 300,
+        "drugivadmixture": "",
+        "drugordercancelled": "No",
+        "drughiclseqno": np.nan,
+        "dosage": "",
+        "routeadmin": "IV",
+        "frequency": "",
+        "loadingdose": "",
+        "prn": "No",
+        "gtc": 0,
+    }
+    frame = pd.DataFrame([{**base, "medicationid": i, **r} for i, r in enumerate(rows)])
+    frame.to_csv(eicu_dir / "medication.csv", index=False)
+
+
+def _vaso_hours(eicu_dir: Path, **cfg) -> dict[int, list[int]]:
+    config = TEST_CFG.model_copy(update=cfg)
+    loader = EicuTableLoader(eicu_dir, config=config)
+    stays = loader.build_cohort()["patientunitstayid"].astype(int).tolist()
+    treat = loader._hourly_treatments(stays)
+    on = treat[treat["vasopressor_flag"] == 1]
+    return {int(s): sorted(int(h) for h in g["hour"]) for s, g in on.groupby("patientunitstayid")}
+
+
+def test_default_vasopressor_source_is_infusion():
+    assert EicuCohortConfig().vasopressor_source == "infusion"
+    with pytest.raises(ValueError):
+        EicuCohortConfig(vasopressor_source="orders")
+
+
+def test_infusion_rate_drives_vasopressor_hours(eicu_dir: Path):
+    _write_infusions(
+        eicu_dir,
+        [
+            # 201: running 60-239 min (hours 1-3), stopped by a zero rate at 240.
+            (201, 60, "Norepinephrine (mcg/min)", "5"),
+            (201, 120, "Norepinephrine (mcg/min)", "8"),
+            (201, 240, "Norepinephrine (mcg/min)", "0"),
+            # 301: one charting with nothing after it holds for at most 4 hours.
+            (301, 0, "Epinephrine (mcg/min)", "2"),
+            # Not vasopressors / not running.
+            (301, 300, "Racepinephrine", "1"),
+            (201, 400, "Propofol (mcg/kg/min)", "20"),
+        ],
+    )
+    # 201 also has an order; at an infusion-charting hospital it is ignored.
+    _write_orders(
+        eicu_dir,
+        [
+            {"patientunitstayid": 201, "drugname": "NOREPINEPHRINE", "drugstopoffset": 470},
+            {"patientunitstayid": 101, "drugname": "NOREPINEPHRINE 4 MG/250 ML NS"},
+        ],
+    )
+    hours = _vaso_hours(eicu_dir)
+    assert hours[201] == [1, 2, 3]
+    assert hours[301] == [0, 1, 2, 3]
+    # 101 is at a hospital with no infusion charting: its order is used (60-300 min).
+    assert hours[101] == [1, 2, 3, 4, 5]
+
+
+def test_fallback_orders_skip_non_administered_and_non_systemic(eicu_dir: Path):
+    # No infusionDrug file at all: every stay falls back to medication orders.
+    _write_orders(
+        eicu_dir,
+        [
+            # Named order teaches that HICL 2051 is norepinephrine ...
+            {
+                "patientunitstayid": 101,
+                "drugname": "Norepinephrine 8 mg in 250ml NS",
+                "drughiclseqno": 2051,
+            },
+            # ... so an unnamed order with that code counts.
+            {"patientunitstayid": 401, "drugname": np.nan, "drughiclseqno": 2051},
+            # Skipped: cancelled, PRN, one-time, local-anaesthetic combination, inhaled.
+            {"patientunitstayid": 201, "drugname": "PHENYLEPHRINE", "drugordercancelled": "Yes"},
+            {"patientunitstayid": 201, "drugname": "EPINEPHRINE", "prn": "Yes"},
+            {"patientunitstayid": 301, "drugname": "EPINEPHRINE 1 MG/10 ML", "frequency": "Once"},
+            {"patientunitstayid": 301, "drugname": "LIDOCAINE-EPINEPHRINE 1%", "routeadmin": "SC"},
+            {"patientunitstayid": 301, "drugname": "RACEPINEPHRINE 2.25% NEB"},
+        ],
+    )
+    hours = _vaso_hours(eicu_dir)
+    assert set(hours) == {101, 401}
+
+
+def test_medication_name_source_reproduces_previous_rule(eicu_dir: Path):
+    _write_infusions(eicu_dir, [(201, 60, "Norepinephrine (mcg/min)", "5")])
+    _write_orders(
+        eicu_dir,
+        [
+            {"patientunitstayid": 101, "drugname": "NOREPINEPHRINE"},
+            {"patientunitstayid": 301, "drugname": "LIDOCAINE-EPINEPHRINE 1%"},
+            {"patientunitstayid": 401, "drugname": np.nan, "drughiclseqno": 2051},
+        ],
+    )
+    hours = _vaso_hours(eicu_dir, vasopressor_source="medication_name")
+    # Substring match on names only: infusions and unnamed orders are ignored,
+    # and the lidocaine-epinephrine order is counted, as in clinops <= 0.6.
+    assert set(hours) == {101, 301}
+
+
+def test_infusion_table_is_optional(eicu_dir: Path, caplog):
+    with caplog.at_level("WARNING"):
+        hours = _vaso_hours(eicu_dir)
+    assert "infusionDrug not found" in caplog.text
+    assert hours[101] == [1, 2, 3, 4, 5]  # the fixture's norepinephrine order
+
+
+def test_random_state_is_deprecated(eicu_dir: Path):
+    with pytest.warns(DeprecationWarning, match="random_state"):
+        EicuCohortConfig(random_state=7)
+    # Re-validating a config the user did not set random_state on stays quiet.
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        EicuTableLoader(eicu_dir, config=TEST_CFG).build_sequences(observation_hours=3)
+
+
+def test_dnr_log_uses_configured_window(eicu_dir: Path, caplog):
+    cfg = TEST_CFG.model_copy(update={"dnr_window_hours": 12})
+    with caplog.at_level("INFO", logger="clinops.ingest.eicu"):
+        EicuTableLoader(eicu_dir, config=cfg).build_cohort()
+    assert "DNR<=12h" in caplog.text
+    assert "DNR<=6h" not in caplog.text
