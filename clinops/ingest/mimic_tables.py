@@ -36,11 +36,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
 
 import pandas as pd
 
-from clinops.ingest.mimic import MimicLoader
+from clinops.ingest.mimic import MimicLoader, MimicVersion
 from clinops.ingest.schema import ClinicalSchema, ColumnSpec
 
 logger = logging.getLogger(__name__)
@@ -180,7 +179,7 @@ class MimicTableLoader:
     def __init__(
         self,
         mimic_path: str | Path,
-        version: Literal["2.2", "2.1", "2.0", "auto"] = "auto",
+        version: MimicVersion = "auto",
         strict_validation: bool = True,
         chunk_size: int | None = None,
     ) -> None:

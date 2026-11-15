@@ -360,7 +360,9 @@ class DataQualityChecker:
         cur_cols = set(df.columns)
 
         for col in sorted(ref_cols - cur_cols):
-            severity = "error" if col in self.required_columns else "warning"
+            severity: Literal["error", "warning"] = (
+                "error" if col in self.required_columns else "warning"
+            )
             issues.append(
                 QualityIssue(
                     column=col,

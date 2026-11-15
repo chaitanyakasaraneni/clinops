@@ -346,3 +346,14 @@ class TestChunkedLoading:
         path.write_text("subject_id,valuenum\n1,72.0\n")
         with pytest.raises(SchemaValidationError):
             MimicLoader(mimic_dir, chunk_size=1).chartevents()
+
+
+@pytest.mark.parametrize(
+    ("dirname", "expected"),
+    [("mimic-iv-3.1", "3.1"), ("mimic-iv-3.0", "3.0"), ("mimic-iv-2.2", "2.2"), ("mimic", "2.2")],
+)
+def test_version_detected_from_directory_name(tmp_path, dirname, expected):
+    root = tmp_path / dirname
+    root.mkdir()
+    _write_csvs(root)
+    assert MimicLoader(root)._version == expected

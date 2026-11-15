@@ -27,6 +27,10 @@ from clinops.ingest.schema import SchemaValidationError
 
 logger = logging.getLogger(__name__)
 
+# MIMIC-IV releases that version="auto" can detect from the directory name.
+_KNOWN_VERSIONS = ("3.1", "3.0", "2.2", "2.1", "2.0")
+MimicVersion = Literal["3.1", "3.0", "2.2", "2.1", "2.0", "auto"]
+
 # Tables large enough that chunk_size applies.
 _CHUNKED_TABLES = frozenset({"chartevents", "labevents"})
 
@@ -73,7 +77,7 @@ class MimicLoaderConfig:
     """Configuration for MimicLoader."""
 
     mimic_path: Path
-    version: Literal["2.2", "2.1", "2.0", "auto"] = "auto"
+    version: MimicVersion = "auto"
     strict_validation: bool = True
     chunk_size: int | None = None  # set for chunked reading on large tables
 
@@ -92,8 +96,9 @@ class MimicLoader:
         Root directory of the MIMIC-IV dataset. Should contain
         ``hosp/`` and ``icu/`` subdirectories.
     version:
-        MIMIC-IV version string (e.g. ``"2.2"``). Use ``"auto"`` to
-        detect from the directory structure.
+        MIMIC-IV version (``"3.1"``, ``"3.0"``, ``"2.2"``, ``"2.1"``, or
+        ``"2.0"``). Use ``"auto"`` (default) to detect it from the directory
+        name, e.g. ``mimic-iv-3.1``.
     strict_validation:
         If True (default), raise ``SchemaValidationError`` when required
         columns are missing. If False, log a warning and continue.
@@ -114,7 +119,7 @@ class MimicLoader:
     def __init__(
         self,
         mimic_path: str | Path,
-        version: Literal["2.2", "2.1", "2.0", "auto"] = "auto",
+        version: MimicVersion = "auto",
         strict_validation: bool = True,
         chunk_size: int | None = None,
     ) -> None:
@@ -247,7 +252,7 @@ class MimicLoader:
     def _detect_version(self) -> str:
         """Attempt to infer MIMIC-IV version from directory name or files."""
         path_str = str(self._cfg.mimic_path).lower()
-        for v in ["2.2", "2.1", "2.0"]:
+        for v in _KNOWN_VERSIONS:
             if v in path_str:
                 return v
         logger.warning("Could not detect MIMIC-IV version from path; assuming 2.2")
