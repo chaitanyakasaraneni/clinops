@@ -150,7 +150,7 @@ aligned = CohortAligner(
 # with an additional hours_from_anchor column
 ```
 
-`anchor_df` must have exactly one row per `id_col` value; otherwise `align()` raises a `ValueError`. MIMIC-IV patients can have several ICU stays, so either align per stay as above (both `chartevents` and `icustays` carry `stay_id`), or keep one stay per patient and align on `subject_id`:
+`anchor_df` must give one anchor time per `id_col` value. Repeated identical rows are fine, but if an id has two different anchor times, `align()` raises a `ValueError`. MIMIC-IV patients can have several ICU stays, so either align per stay as above (both `chartevents` and `icustays` carry `stay_id`), or keep one stay per patient and align on `subject_id`:
 
 ```python
 first_stays = stays.sort_values("intime").drop_duplicates("subject_id")

@@ -22,7 +22,7 @@ feedback.
   like `GroupedPatientSplitter`, instead of only logging an error.
   ([#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
 - `CohortAligner.align()` raised an opaque pandas `InvalidIndexError` when
-  `anchor_df` had more than one row per id, as with readmitted patients. It now
+  `anchor_df` had more than one anchor time per id, as with readmitted patients. It now
   raises a `ValueError` explaining how to align per stay (`id_col="stay_id"`) or
   keep one stay per patient. Missing columns raise a clear error, and events
   with no anchor are logged as dropped.
