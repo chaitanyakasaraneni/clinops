@@ -379,3 +379,28 @@ def test_explicit_untested_version_accepted_with_warning(mimic_dir, caplog):
         loader = MimicLoader(mimic_dir, version="3.1")
     assert loader._version == "3.1"
     assert "has not been tested" in caplog.text
+
+
+class TestMimicLoaderConfig:
+    """#35: MimicLoaderConfig validates like the other loader configs."""
+
+    def test_missing_path_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="does not exist"):
+            MimicLoader(tmp_path / "nope")
+
+    @pytest.mark.parametrize("chunk_size", [0, -5])
+    def test_chunk_size_must_be_positive(self, mimic_dir, chunk_size):
+        with pytest.raises(ValueError, match="chunk_size must be positive"):
+            MimicLoader(mimic_dir, chunk_size=chunk_size)
+
+
+def test_summary_reads_parquet_tables(tmp_path, capsys):
+    (tmp_path / "mimic-iv-2.2").mkdir()
+    root = _write_csvs(tmp_path / "mimic-iv-2.2")
+    # Convert every table to Parquet; summary() used to call read_csv on them.
+    for csv in list(root.rglob("*.csv")):
+        pd.read_csv(csv).to_parquet(csv.with_suffix(".parquet"))
+        csv.unlink()
+    result = MimicTableLoader(root).summary()
+    assert (result["rows_sampled"] > 0).all()
+    assert result.loc[result["table"] == "icustays", "columns"].item() == 8

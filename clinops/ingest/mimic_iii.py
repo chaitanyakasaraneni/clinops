@@ -638,11 +638,13 @@ class MimicIIILoader:
         if item_ids is not None and "itemid" in df.columns:
             df = df[df["itemid"].isin(item_ids)]
 
-        col = time_col or next(
-            (c for c in ["charttime", "starttime", "admittime"] if c in df.columns),
-            None,
-        )
-        if col and col in df.columns:
+        # Filter on time_col if given, else on the first standard time column present.
+        if time_col is not None:
+            col: str | None = time_col
+        else:
+            candidates = [c for c in ("charttime", "starttime", "admittime") if c in df.columns]
+            col = candidates[0] if candidates else None
+        if col is not None and col in df.columns:
             if start_time:
                 df = df[df[col] >= pd.Timestamp(start_time)]
             if end_time:

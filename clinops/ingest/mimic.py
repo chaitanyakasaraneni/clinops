@@ -19,10 +19,10 @@ import contextlib
 import logging
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from pydantic import BaseModel, field_validator
 
 from clinops.ingest.schema import SchemaValidationError
 
@@ -80,18 +80,27 @@ _TABLE_PATHS: dict[str, tuple[str, str]] = {
 }
 
 
-@dataclass
-class MimicLoaderConfig:
-    """Configuration for MimicLoader."""
+class MimicLoaderConfig(BaseModel):
+    """Validated configuration for MimicLoader."""
 
     mimic_path: Path
     version: str = "auto"
     strict_validation: bool = True
     chunk_size: int | None = None  # set for chunked reading on large tables
 
-    def __post_init__(self) -> None:
-        if not self.mimic_path.exists():
-            raise ValueError(f"MIMIC path does not exist: {self.mimic_path}")
+    @field_validator("mimic_path")
+    @classmethod
+    def _path_must_exist(cls, v: Path) -> Path:
+        if not v.exists():
+            raise ValueError(f"MIMIC path does not exist: {v}")
+        return v
+
+    @field_validator("chunk_size")
+    @classmethod
+    def _chunk_size_positive(cls, v: int | None) -> int | None:
+        if v is not None and v <= 0:
+            raise ValueError(f"chunk_size must be positive, got {v}")
+        return v
 
 
 class MimicLoader:
