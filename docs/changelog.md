@@ -27,6 +27,15 @@ feedback.
   keep one stay per patient. Missing columns raise a clear error, and events
   with no anchor are logged as dropped.
   ([pyOpenSci review](https://github.com/pyOpenSci/software-submission/issues/362#issuecomment-6540182036))
+- `FlatFileLoader` reads Parquet files with dots in their name (e.g.
+  `vitals.2024-01.parquet`); they were read as CSV and failed.
+- `MimicIIILoader.prescriptions(drugs=...)` matches drug names literally, so names
+  with parentheses or `+` work instead of matching nothing or raising.
+- `GCSPipelineStore` / `S3PipelineStore.list_artifacts()` treat the store prefix and
+  the `prefix` argument as folders: a store at `clinops` no longer lists
+  `clinops-old/...` (as `-old/...`), and `list_artifacts("features")` no longer
+  includes `features-old/...`. A store prefix with a leading slash now lists the
+  artifacts it uploaded.
 
 ### Documentation
 

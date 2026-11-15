@@ -98,6 +98,16 @@ class TestSchemaViolationReporting:
 
 
 class TestFlatFileLoader:
+    def test_dotted_parquet_name(self, tmp_path):
+        path = tmp_path / "vitals.2024-01.parquet"
+        pd.DataFrame({"patient_id": [1, 2], "heart_rate": [72.0, 85.0]}).to_parquet(path)
+        assert FlatFileLoader(path).load()["heart_rate"].tolist() == [72.0, 85.0]
+
+    def test_gzipped_csv(self, tmp_path):
+        path = tmp_path / "vitals.csv.gz"
+        pd.DataFrame({"patient_id": [1], "heart_rate": [72.0]}).to_csv(path, index=False)
+        assert FlatFileLoader(path).load()["heart_rate"].tolist() == [72.0]
+
     def test_load_csv(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         csv_file.write_text(

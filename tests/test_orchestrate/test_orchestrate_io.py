@@ -150,6 +150,48 @@ class TestGCSPipelineStoreIO:
         assert store.list_artifacts() == ["features/a", "features/b", "labels"]
         assert store.list_artifacts("features") == ["features/a", "features/b"]
 
+    @pytest.mark.parametrize("store_cls", ["gcs", "s3"])
+    def test_sub_prefix_is_a_folder(self, store_cls):
+        if store_cls == "gcs":
+            store = GCSPipelineStore("bkt", prefix="clinops")
+            store._client = FakeGCSClient()
+        else:
+            store = S3PipelineStore("bkt", prefix="clinops")
+            store._client = FakeS3Client()
+        for name in ("features", "features/a", "features-old/b", "featuresx"):
+            store.upload(make_df(), name)
+        assert store.list_artifacts("features") == ["features", "features/a"]
+        assert store.list_artifacts("features/") == ["features", "features/a"]
+        assert store.list_artifacts() == ["features", "features-old/b", "features/a", "featuresx"]
+
+    @pytest.mark.parametrize("store_cls", ["gcs", "s3"])
+    def test_leading_slash_prefix_round_trips(self, store_cls):
+        if store_cls == "gcs":
+            store = GCSPipelineStore("bkt", prefix="/clinops/")
+            store._client = FakeGCSClient()
+        else:
+            store = S3PipelineStore("bkt", prefix="/clinops/")
+            store._client = FakeS3Client()
+        store.upload(make_df(), "features/a")
+        assert store.list_artifacts() == ["features/a"]
+        pd.testing.assert_frame_equal(store.download("features/a"), make_df())
+
+    def test_list_artifacts_ignores_sibling_prefix(self):
+        client = FakeGCSClient()
+        store = GCSPipelineStore("bkt", prefix="clinops")
+        old = GCSPipelineStore("bkt", prefix="clinops-old")
+        store._client = old._client = client
+        store.upload(make_df(), "features")
+        old.upload(make_df(), "legacy")
+        assert store.list_artifacts() == ["features"]
+        assert old.list_artifacts() == ["legacy"]
+
+    def test_list_artifacts_without_prefix(self):
+        store = GCSPipelineStore("bkt")
+        store._client = FakeGCSClient()
+        store.upload(make_df(), "features/a")
+        assert store.list_artifacts() == ["features/a"]
+
     def test_client_uses_service_account_when_credentials_path_set(self, monkeypatch):
         calls: dict[str, Any] = {}
 
@@ -213,6 +255,16 @@ class TestS3PipelineStoreIO:
         store.upload(make_df(), "a")
         client.objects[("bkt", "clinops/readme.md")] = b"ignored"
         assert store.list_artifacts() == ["a", "b"]
+
+    def test_list_artifacts_ignores_sibling_prefix(self):
+        client = FakeS3Client()
+        store = S3PipelineStore("bkt", prefix="clinops")
+        old = S3PipelineStore("bkt", prefix="clinops-old")
+        store._client = old._client = client
+        store.upload(make_df(), "features")
+        old.upload(make_df(), "legacy")
+        assert store.list_artifacts() == ["features"]
+        assert old.list_artifacts() == ["legacy"]
 
     def test_client_built_from_boto3_session(self, monkeypatch):
         calls: dict[str, Any] = {}

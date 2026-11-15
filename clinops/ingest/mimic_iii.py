@@ -51,6 +51,7 @@ Sci Data 3, 160035 (2016). https://doi.org/10.1038/sdata.2016.35
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Literal
@@ -415,8 +416,9 @@ class MimicIIILoader:
         df = self._load("prescriptions")
         df = self._filter(df, subject_ids, hadm_ids)
         if drugs is not None:
-            pattern = "|".join(drugs)
-            df = df[df["drug"].str.contains(pattern, case=False, na=False)]
+            # Names are matched literally; "Heparin (Porcine)" or "C++" are not regexes.
+            pattern = "|".join(re.escape(d) for d in drugs)
+            df = df[df["drug"].str.contains(pattern, case=False, na=False, regex=True)]
         return df
 
     def inputevents(

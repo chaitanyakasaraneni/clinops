@@ -109,8 +109,9 @@ class FlatFileLoader:
     # ------------------------------------------------------------------
 
     def _read_file(self) -> pd.DataFrame:
-        suffix = "".join(self._path.suffixes).lower()
-        if suffix in (".parquet", ".pq"):
+        # Only the last suffix decides the format, so dotted names such as
+        # "vitals.2024-01.parquet" are read as Parquet.
+        if self._path.suffix.lower() in (".parquet", ".pq"):
             return pd.read_parquet(self._path)
         return pd.read_csv(
             self._path,
