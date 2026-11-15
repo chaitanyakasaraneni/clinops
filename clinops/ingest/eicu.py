@@ -498,6 +498,16 @@ class EicuLoader:
 # ---------------------------------------------------------------------------
 
 
+def _text(series: pd.Series) -> pd.Series:
+    """
+    A column as strings with "" for missing values.
+
+    A text column that is empty in every row is read as float64, and pandas 3.1
+    warns on ``fillna("")`` for it, so cast to a string dtype first.
+    """
+    return series.astype("string").fillna("")
+
+
 def parse_eicu_age(value: object) -> float:
     """
     Parse an eICU ``age`` cell into a float.
@@ -1140,7 +1150,7 @@ class EicuTableLoader:
         """Hours with a vasopressor infusion charted at a rate above zero."""
         if inf.empty or "drugname" not in inf.columns:
             return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
-        drug = inf["drugname"].fillna("").str.extract(_VASOPRESSOR_NAME, expand=False)
+        drug = _text(inf["drugname"]).str.extract(_VASOPRESSOR_NAME, expand=False)
         v = inf.assign(
             drug=drug.str.lower().replace(_VASOPRESSOR_BRANDS),
             rate=pd.to_numeric(inf["drugrate"], errors="coerce"),
@@ -1167,7 +1177,7 @@ class EicuTableLoader:
         """
         if med.empty:
             return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
-        name = med["drugname"].fillna("")
+        name = _text(med["drugname"])
         is_vaso_name = name.str.extract(_VASOPRESSOR_NAME, expand=False).notna() & ~(
             name.str.contains(_NOT_VASOPRESSOR_THERAPY)
         )
@@ -1181,7 +1191,7 @@ class EicuTableLoader:
         def text(col: str) -> pd.Series:
             if col not in med.columns:
                 return pd.Series("", index=med.index)
-            return med[col].fillna("").astype(str).str.strip().str.upper()
+            return _text(med[col]).str.strip().str.upper()
 
         given = (
             text("drugordercancelled").ne("YES")

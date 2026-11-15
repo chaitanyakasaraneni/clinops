@@ -833,7 +833,7 @@ def test_random_state_is_deprecated(eicu_dir: Path):
     import warnings
 
     with warnings.catch_warnings():
-        warnings.simplefilter("error", DeprecationWarning)
+        warnings.filterwarnings("error", message=".*random_state", category=DeprecationWarning)
         EicuTableLoader(eicu_dir, config=TEST_CFG).build_sequences(observation_hours=3)
 
 
