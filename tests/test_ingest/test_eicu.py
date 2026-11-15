@@ -843,3 +843,58 @@ def test_dnr_log_uses_configured_window(eicu_dir: Path, caplog):
         EicuTableLoader(eicu_dir, config=cfg).build_cohort()
     assert "DNR<=12h" in caplog.text
     assert "DNR<=6h" not in caplog.text
+
+
+def test_load_diagnosis_filters_stays(eicu_dir: Path):
+    loader = EicuLoader(eicu_dir)
+    all_dx = loader.load_diagnosis()
+    some = loader.load_diagnosis(patient_unit_stay_ids=[all_dx["patientunitstayid"].iloc[0]])
+    assert set(some["patientunitstayid"]) == {all_dx["patientunitstayid"].iloc[0]}
+    assert list(some.index) == list(range(len(some)))
+    assert loader.load_diagnosis(patient_unit_stay_ids=[]).empty
+
+
+def test_table_file_name_matched_case_insensitively(eicu_dir: Path, monkeypatch):
+    # Simulate a case-sensitive file system (Linux) on any platform.
+    _write_infusions(eicu_dir, [(201, 60, "Norepinephrine (mcg/min)", "5")])
+    real_exists = Path.exists
+
+    def case_sensitive_exists(self: Path, *args, **kwargs) -> bool:
+        return real_exists(self) and self.name in {p.name for p in self.parent.iterdir()}
+
+    monkeypatch.setattr(Path, "exists", case_sensitive_exists)
+    inf = EicuLoader(eicu_dir).load_infusion_drug()
+    assert inf["patientunitstayid"].tolist() == [201]
+
+
+def test_stays_without_hospital_id_use_their_own_charting(eicu_dir: Path):
+    patient = pd.read_csv(eicu_dir / "patient.csv").drop(columns="hospitalid")
+    patient.to_csv(eicu_dir / "patient.csv", index=False)
+    _write_infusions(eicu_dir, [(201, 60, "Norepinephrine (mcg/min)", "5")])
+    _write_orders(
+        eicu_dir,
+        [
+            {"patientunitstayid": 201, "drugname": "NOREPINEPHRINE", "drugstopoffset": 470},
+            {"patientunitstayid": 301, "drugname": "PHENYLEPHRINE"},
+        ],
+    )
+    hours = _vaso_hours(eicu_dir)
+    assert hours[201] == [1, 2, 3, 4]  # infusion only (order ignored), 60 + 240 min cap
+    assert hours[301] == [1, 2, 3, 4, 5]  # no charting for this stay: order fallback
+
+
+@pytest.mark.parametrize("source", ["infusion", "medication_name"])
+def test_no_vasopressors_gives_no_flags(eicu_dir: Path, source):
+    _write_orders(eicu_dir, [{"patientunitstayid": 101, "drugname": "ACETAMINOPHEN"}])
+    med = pd.read_csv(eicu_dir / "medication.csv").iloc[0:0]
+    med.to_csv(eicu_dir / "medication.csv", index=False)
+    assert _vaso_hours(eicu_dir, vasopressor_source=source) == {}
+
+
+def test_fallback_without_order_status_columns(eicu_dir: Path):
+    _write_orders(eicu_dir, [{"patientunitstayid": 101, "drugname": "NOREPINEPHRINE"}])
+    med = pd.read_csv(eicu_dir / "medication.csv").drop(
+        columns=["drugordercancelled", "prn", "frequency"]
+    )
+    med.to_csv(eicu_dir / "medication.csv", index=False)
+    assert _vaso_hours(eicu_dir)[101] == [1, 2, 3, 4, 5]
