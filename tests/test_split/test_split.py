@@ -256,3 +256,138 @@ class TestStratifiedPatientSplitter:
         result = splitter.split(stratified_df)
         summary = result.summary()
         assert "outcome_rate" in summary
+
+
+# Test patients chosen by StratifiedPatientSplitter(test_size=0.2, random_state=42)
+# on stratified_df in clinops 0.6.1; binary splits must not change.
+EXPECTED_BINARY_TEST = [1, 8, 13, 17, 21, 22, 31, 34]
+
+
+class TestStratifiedMulticlass:
+    """Regression tests for multiclass and non-0/1 labels (pyOpenSci review)."""
+
+    def test_every_class_reaches_test(self):
+        df = pd.DataFrame({"subject_id": range(300), "y": [0, 1, 2] * 100})
+        result = StratifiedPatientSplitter(outcome_col="y", test_size=0.2).split(df)
+        assert result.metadata["test_class_counts"] == {0: 20, 1: 20, 2: 20}
+        assert result.metadata["train_class_counts"] == {0: 80, 1: 80, 2: 80}
+        assert set(result.test["y"]) == {0, 1, 2}
+
+    def test_outcome_rates_only_for_binary(self):
+        df = pd.DataFrame({"subject_id": range(30), "y": [0, 1, 2] * 10})
+        result = StratifiedPatientSplitter(outcome_col="y").split(df)
+        assert "test_outcome_rate" not in result.metadata
+
+    @pytest.mark.parametrize("values", [[-1, 1], ["alive", "dead"], [True, False], [0.0, 1.0]])
+    def test_non_01_labels(self, values):
+        df = pd.DataFrame({"subject_id": range(100), "y": values * 50})
+        result = StratifiedPatientSplitter(outcome_col="y", test_size=0.2).split(df)
+        assert sorted(result.metadata["test_class_counts"].values()) == [10, 10]
+
+    def test_patients_labelled_by_outcome_fn(self):
+        # Patient 1 is labelled 2 by the default (max) but 0 by "first value".
+        df = pd.DataFrame({"subject_id": [1, 1, 2, 3, 4], "y": [0, 2, 1, 1, 0]})
+        splitter = StratifiedPatientSplitter(
+            outcome_col="y", test_size=0.5, patient_outcome_fn=lambda s: s.iloc[0]
+        )
+        counts = splitter.split(df).metadata
+        total = {
+            k: counts["train_class_counts"].get(k, 0) + counts["test_class_counts"].get(k, 0)
+            for k in (0, 1)
+        }
+        assert total == {0: 2, 1: 2}
+
+    def test_singleton_class_warns(self, caplog):
+        df = pd.DataFrame({"subject_id": range(11), "y": [0] * 5 + [1] * 5 + [2]})
+        with caplog.at_level("WARNING"):
+            result = StratifiedPatientSplitter(outcome_col="y").split(df)
+        assert "class 2 has only one patient" in caplog.text
+        assert result.metadata["test_class_counts"][2] == 1
+
+    def test_binary_labels_from_string_outcome_skip_rates(self):
+        df = pd.DataFrame({"subject_id": range(10), "y": ["alive", "dead"] * 5})
+        splitter = StratifiedPatientSplitter(
+            outcome_col="y", patient_outcome_fn=lambda s: int((s == "dead").any())
+        )
+        meta = splitter.split(df).metadata
+        assert "test_outcome_rate" not in meta
+        assert meta["test_class_counts"] == {0: 1, 1: 1}
+
+    def test_population_rate_excludes_rows_without_id(self):
+        df = pd.DataFrame({"subject_id": [1, 2, 3, 4, None], "y": [0, 0, 1, 1, 1]})
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        assert meta["population_outcome_rate"] == 0.5
+
+    def test_all_singleton_classes_raise(self):
+        df = pd.DataFrame({"subject_id": [1, 2], "y": [0, 1]})
+        with pytest.raises(ValueError, match="train split would be empty"):
+            StratifiedPatientSplitter(outcome_col="y").split(df)
+
+    def test_rows_without_id_warn(self, caplog):
+        df = pd.DataFrame({"subject_id": [1, 2, 3, 4, None], "y": [0, 0, 1, 1, 1]})
+        with caplog.at_level("WARNING"):
+            result = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df)
+        assert "1 rows have no 'subject_id'" in caplog.text
+        assert result.train_size + result.test_size == 4
+
+    def test_ordered_categorical_uses_max(self):
+        severity = pd.CategoricalDtype(["mild", "severe"], ordered=True)
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 3, 4],
+                "y": pd.Series(["mild", "severe", "mild", "severe", "mild"], dtype=severity),
+            }
+        )
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        total = {
+            k: meta["train_class_counts"].get(k, 0) + meta["test_class_counts"].get(k, 0)
+            for k in ("mild", "severe")
+        }
+        assert total == {"mild": 2, "severe": 2}
+
+    @pytest.mark.parametrize("dtype", [object, "category"])
+    def test_varying_nominal_labels_need_outcome_fn(self, dtype):
+        df = pd.DataFrame(
+            {"subject_id": [1, 1, 2, 3], "y": pd.Series(["a", "b", "a", "b"], dtype=dtype)}
+        )
+        with pytest.raises(ValueError, match="Pass patient_outcome_fn"):
+            StratifiedPatientSplitter(outcome_col="y").split(df)
+        fn = StratifiedPatientSplitter(
+            outcome_col="y", test_size=0.5, patient_outcome_fn=lambda s: s.iloc[-1]
+        )
+        assert fn.split(df).metadata["n_test_patients"] == 2
+
+    def test_numbers_in_object_column_use_max(self):
+        df = pd.DataFrame({"subject_id": [1, 1, 2, 3], "y": pd.Series([0, 1, 0, 1], dtype=object)})
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        assert meta["test_class_counts"] == {0: 1, 1: 1}
+
+    def test_large_test_size_keeps_one_patient_per_class_in_train(self):
+        df = pd.DataFrame({"subject_id": range(4), "y": [0, 0, 1, 1]})
+        result = StratifiedPatientSplitter(outcome_col="y", test_size=0.9).split(df)
+        assert result.metadata["train_class_counts"] == {0: 1, 1: 1}
+
+    def test_missing_label_raises(self):
+        df = pd.DataFrame({"subject_id": [1, 2, 3], "y": [0.0, 1.0, np.nan]})
+        with pytest.raises(ValueError, match="missing label"):
+            StratifiedPatientSplitter(outcome_col="y").split(df)
+
+    def test_binary_split_matches_previous_release(self, stratified_df):
+        # Seed 42 on the 40-patient fixture picks these test patients in 0.6.1.
+        result = StratifiedPatientSplitter(
+            id_col="subject_id", outcome_col="outcome", test_size=0.2
+        ).split(stratified_df)
+        assert sorted(result.test["subject_id"].unique()) == EXPECTED_BINARY_TEST
+
+
+class TestPatientSplitterLeakage:
+    def test_leak_raises(self, patient_df, monkeypatch):
+        # Simulate a bug that duplicates a patient into both splits.
+        real_isin = pd.Series.isin
+
+        def leaky_isin(self, values):
+            return real_isin(self, values) | (self == 1)
+
+        monkeypatch.setattr(pd.Series, "isin", leaky_isin)
+        with pytest.raises(RuntimeError, match="leaked"):
+            PatientSplitter(id_col="subject_id").split(patient_df)
