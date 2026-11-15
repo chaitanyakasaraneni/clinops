@@ -304,6 +304,20 @@ class TestStratifiedMulticlass:
         assert "class 2 has only one patient" in caplog.text
         assert result.metadata["test_class_counts"][2] == 1
 
+    def test_binary_labels_from_string_outcome_skip_rates(self):
+        df = pd.DataFrame({"subject_id": range(10), "y": ["alive", "dead"] * 5})
+        splitter = StratifiedPatientSplitter(
+            outcome_col="y", patient_outcome_fn=lambda s: int((s == "dead").any())
+        )
+        meta = splitter.split(df).metadata
+        assert "test_outcome_rate" not in meta
+        assert meta["test_class_counts"] == {0: 1, 1: 1}
+
+    def test_population_rate_excludes_rows_without_id(self):
+        df = pd.DataFrame({"subject_id": [1, 2, 3, 4, None], "y": [0, 0, 1, 1, 1]})
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        assert meta["population_outcome_rate"] == 0.5
+
     def test_all_singleton_classes_raise(self):
         df = pd.DataFrame({"subject_id": [1, 2], "y": [0, 1]})
         with pytest.raises(ValueError, match="train split would be empty"):

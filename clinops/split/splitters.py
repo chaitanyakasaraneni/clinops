@@ -589,10 +589,17 @@ class StratifiedPatientSplitter:
             "train_class_counts": _class_counts(labels, train_patients),
             "test_class_counts": _class_counts(labels, test_patients),
         }
-        # Row-level outcome rates are only meaningful for a binary outcome.
+        # Row-level outcome rates are only meaningful when the outcome column itself
+        # is 0/1 (or bool); a patient_outcome_fn can make labels binary from values
+        # that have no mean, such as strings. The population is the rows that were
+        # split, i.e. those with an id.
         rates: dict[str, float] = {}
-        if set(labels.unique()) <= {0, 1}:
-            pop_rate = float(df[self.outcome_col].mean())
+        split_rows = df[self.id_col].notna()
+        raw = df.loc[split_rows, self.outcome_col]
+        if pd.api.types.infer_dtype(raw, skipna=True) in _NUMERIC_KINDS and set(
+            raw.dropna().unique()
+        ) <= {0, 1}:
+            pop_rate = float(raw.mean())
             train_rate = float(train[self.outcome_col].mean()) if len(train) else 0.0
             test_rate = float(test[self.outcome_col].mean()) if len(test) else 0.0
             rates = {
