@@ -487,7 +487,7 @@ pip install -e ".[dev]"       # development
 
 | Source | Format |
 |---|---|
-| MIMIC-IV v2.0–v2.2 | CSV, CSV.GZ, Parquet |
+| MIMIC-IV v2.0–v2.2 (other versions load with a warning) | CSV, CSV.GZ, Parquet |
 | MIMIC-III v1.4 | CSV, CSV.GZ, Parquet |
 | eICU-CRD v2.0 | CSV, CSV.GZ, Parquet |
 | FHIR R4 | JSON Bundle, NDJSON |

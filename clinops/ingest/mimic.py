@@ -1,8 +1,9 @@
 """
 MIMIC-IV data loader with table-level validation and lazy loading.
 
-Supports MIMIC-IV v2.0, v2.1, and v2.2. Handles both the hosp and icu
-modules. Validates column presence, dtypes, and value ranges on load.
+Tested with MIMIC-IV v2.0, v2.1, and v2.2. Other versions are accepted and
+logged with a warning. Handles both the hosp and icu modules. Validates column
+presence, dtypes, and value ranges on load.
 
 Example
 -------
@@ -16,10 +17,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 import pandas as pd
 
@@ -27,9 +28,12 @@ from clinops.ingest.schema import SchemaValidationError
 
 logger = logging.getLogger(__name__)
 
-# MIMIC-IV releases that version="auto" can detect from the directory name.
-_KNOWN_VERSIONS = ("3.1", "3.0", "2.2", "2.1", "2.0")
-MimicVersion = Literal["3.1", "3.0", "2.2", "2.1", "2.0", "auto"]
+# MIMIC-IV releases clinops is tested against. Other versions are accepted; the
+# version is metadata only and does not change how tables are read.
+_TESTED_VERSIONS = ("2.2", "2.1", "2.0")
+# A path component naming a release: "mimic-iv-3.1", "mimiciv_2.2", or PhysioNet's
+# "mimiciv/3.1" layout, where the version is its own directory.
+_VERSION_DIR = re.compile(r"(?:mimic-?iv[-_]?v?)?(\d+\.\d+)")
 
 # Tables large enough that chunk_size applies.
 _CHUNKED_TABLES = frozenset({"chartevents", "labevents"})
@@ -77,7 +81,7 @@ class MimicLoaderConfig:
     """Configuration for MimicLoader."""
 
     mimic_path: Path
-    version: MimicVersion = "auto"
+    version: str = "auto"
     strict_validation: bool = True
     chunk_size: int | None = None  # set for chunked reading on large tables
 
@@ -96,9 +100,11 @@ class MimicLoader:
         Root directory of the MIMIC-IV dataset. Should contain
         ``hosp/`` and ``icu/`` subdirectories.
     version:
-        MIMIC-IV version (``"3.1"``, ``"3.0"``, ``"2.2"``, ``"2.1"``, or
-        ``"2.0"``). Use ``"auto"`` (default) to detect it from the directory
-        name, e.g. ``mimic-iv-3.1``.
+        MIMIC-IV version string (e.g. ``"2.2"``). ``"auto"`` (default) reads it
+        from the directory name, such as ``mimic-iv-2.2`` or PhysioNet's
+        ``mimiciv/2.2``. clinops is tested with 2.0 to 2.2; other versions
+        are accepted with a warning. The version is recorded, not used to
+        change how tables are read.
     strict_validation:
         If True (default), raise ``SchemaValidationError`` when required
         columns are missing. If False, log a warning and continue.
@@ -119,7 +125,7 @@ class MimicLoader:
     def __init__(
         self,
         mimic_path: str | Path,
-        version: MimicVersion = "auto",
+        version: str = "auto",
         strict_validation: bool = True,
         chunk_size: int | None = None,
     ) -> None:
@@ -130,6 +136,11 @@ class MimicLoader:
             chunk_size=chunk_size,
         )
         self._version = self._detect_version() if version == "auto" else version
+        if self._version not in _TESTED_VERSIONS:
+            logger.warning(
+                f"MIMIC-IV {self._version} has not been tested with clinops "
+                f"(tested: {', '.join(_TESTED_VERSIONS)}); check that tables load as expected"
+            )
         logger.info(
             f"MimicLoader initialised — path={self._cfg.mimic_path}, version={self._version}"
         )
@@ -250,11 +261,11 @@ class MimicLoader:
     # ------------------------------------------------------------------
 
     def _detect_version(self) -> str:
-        """Attempt to infer MIMIC-IV version from directory name or files."""
-        path_str = str(self._cfg.mimic_path).lower()
-        for v in _KNOWN_VERSIONS:
-            if v in path_str:
-                return v
+        """Infer the MIMIC-IV version from the directory name (e.g. ``mimic-iv-2.2``)."""
+        for part in reversed(self._cfg.mimic_path.parts):
+            match = _VERSION_DIR.fullmatch(part.lower())
+            if match:
+                return match.group(1)
         logger.warning("Could not detect MIMIC-IV version from path; assuming 2.2")
         return "2.2"
 

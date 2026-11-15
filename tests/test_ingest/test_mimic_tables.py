@@ -349,11 +349,26 @@ class TestChunkedLoading:
 
 
 @pytest.mark.parametrize(
-    ("dirname", "expected"),
-    [("mimic-iv-3.1", "3.1"), ("mimic-iv-3.0", "3.0"), ("mimic-iv-2.2", "2.2"), ("mimic", "2.2")],
+    ("dirname", "expected", "warns"),
+    [
+        ("mimic-iv-2.2", "2.2", False),
+        ("mimiciv/2.1", "2.1", False),
+        ("mimic-iv-3.1", "3.1", True),
+        ("physionet.org/files/mimiciv/3.1", "3.1", True),
+        ("mimic", "2.2", True),
+    ],
 )
-def test_version_detected_from_directory_name(tmp_path, dirname, expected):
+def test_version_detected_from_path(tmp_path, caplog, dirname, expected, warns):
     root = tmp_path / dirname
-    root.mkdir()
+    root.mkdir(parents=True)
     _write_csvs(root)
-    assert MimicLoader(root)._version == expected
+    with caplog.at_level("WARNING", logger="clinops.ingest.mimic"):
+        assert MimicLoader(root)._version == expected
+    assert bool(caplog.records) is warns
+
+
+def test_explicit_untested_version_accepted_with_warning(mimic_dir, caplog):
+    with caplog.at_level("WARNING", logger="clinops.ingest.mimic"):
+        loader = MimicLoader(mimic_dir, version="3.1")
+    assert loader._version == "3.1"
+    assert "has not been tested" in caplog.text

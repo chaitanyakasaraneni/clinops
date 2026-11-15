@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from clinops.ingest.mimic import MimicLoader, MimicVersion
+from clinops.ingest.mimic import MimicLoader
 from clinops.ingest.schema import ClinicalSchema, ColumnSpec
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class MimicTableLoader:
     def __init__(
         self,
         mimic_path: str | Path,
-        version: MimicVersion = "auto",
+        version: str = "auto",
         strict_validation: bool = True,
         chunk_size: int | None = None,
     ) -> None:
