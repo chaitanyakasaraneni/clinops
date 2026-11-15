@@ -484,23 +484,30 @@ class TestImputer:
         result = imputer.fit_transform(df)
         assert result["hr"].iloc[0] == pytest.approx(80.0)
 
-    def test_mean_unfitted_falls_back_to_column_mean(self):
-        imputer = Imputer(ImputationStrategy.MEAN)  # fit() never called
-        df = pd.DataFrame({"hr": [60.0, np.nan, 80.0]})
-        result = imputer.transform(df)
+    @pytest.mark.parametrize("strategy", [ImputationStrategy.MEAN, ImputationStrategy.MEDIAN])
+    def test_unfitted_mean_median_raise(self, strategy):
+        # Never compute the statistic from the data being imputed (pyOpenSci #41).
+        with pytest.raises(RuntimeError, match="not fitted"):
+            Imputer(strategy).transform(pd.DataFrame({"hr": [60.0, np.nan, 80.0]}))
+
+    def test_fit_transform_fits_on_the_given_data(self):
+        result = Imputer(ImputationStrategy.MEAN).fit_transform(
+            pd.DataFrame({"hr": [60.0, np.nan, 80.0]})
+        )
         assert result["hr"].iloc[1] == pytest.approx(70.0)
+
+    @pytest.mark.parametrize(
+        "strategy", [ImputationStrategy.BACKWARD_FILL, ImputationStrategy.LINEAR]
+    )
+    def test_future_looking_strategies_warn(self, strategy):
+        with pytest.warns(UserWarning, match="future information"):
+            Imputer(strategy)
 
     def test_median_fitted_uses_stored_fill_values(self):
         imputer = Imputer(ImputationStrategy.MEDIAN)
         imputer.fit(pd.DataFrame({"hr": [60.0, 80.0, 100.0]}))
         result = imputer.transform(pd.DataFrame({"hr": [np.nan]}))
         assert result["hr"].iloc[0] == pytest.approx(80.0)
-
-    def test_median_unfitted_falls_back_to_column_median(self):
-        imputer = Imputer(ImputationStrategy.MEDIAN)  # fit() never called
-        df = pd.DataFrame({"hr": [60.0, np.nan, 80.0, 100.0]})
-        result = imputer.transform(df)
-        assert result["hr"].iloc[1] == pytest.approx(80.0)
 
     def test_max_gap_hours_raises_when_time_col_absent_from_df(self):
         # Silently skipping the limit would fill across gaps of any length.
@@ -862,6 +869,13 @@ class TestWindowerImputation:
         with pytest.raises(ValueError, match="Imputer"):
             TemporalWindower(imputation=strategy)
 
+    @pytest.mark.parametrize(
+        "strategy", [ImputationStrategy.BACKWARD_FILL, ImputationStrategy.LINEAR]
+    )
+    def test_future_looking_strategies_rejected(self, strategy):
+        with pytest.raises(ValueError, match="later windows"):
+            TemporalWindower(imputation=strategy)
+
 
 class TestLagFeatureBuilder:
     def test_lag_columns_created(self):
@@ -980,3 +994,42 @@ class TestCohortAlignerAnchors:
             )
         assert 20 not in set(aligned["stay_id"])
         assert "dropping 1 events" in caplog.text
+
+
+class TestLagFeatureBuilderInputs:
+    """pyOpenSci #40: the ordering column is explicit and checked."""
+
+    def _df(self, time_col="window_start"):
+        return pd.DataFrame(
+            {
+                "subject_id": [1, 1, 1],
+                time_col: pd.date_range("2150-01-01", periods=3, freq="h")[::-1],
+                "hr": [3.0, 2.0, 1.0],
+            }
+        )
+
+    def test_missing_time_col_raises(self):
+        df = self._df().drop(columns="window_start")
+        with pytest.raises(ValueError, match="window_start"):
+            LagFeatureBuilder(feature_cols=["hr"]).fit_transform(df)
+
+    def test_custom_time_col_orders_rows(self):
+        out = LagFeatureBuilder(lags=[1], feature_cols=["hr"], time_col="charttime").fit_transform(
+            self._df("charttime")
+        )
+        # Sorted by time, so values run 1, 2, 3 and each lag is the previous one.
+        assert out["hr"].tolist() == [1.0, 2.0, 3.0]
+        assert out["hr_lag1"].tolist()[1:] == [1.0, 2.0]
+
+    def test_defaults_and_empty_lags(self):
+        assert LagFeatureBuilder().lags == [1, 2]
+        out = LagFeatureBuilder(lags=[], rolling_windows=[2], feature_cols=["hr"]).fit_transform(
+            self._df()
+        )
+        assert not any("lag" in c for c in out.columns)
+        assert "hr_roll2_mean" in out.columns
+
+    def test_log_reports_added_columns(self, caplog):
+        with caplog.at_level("INFO", logger="clinops.temporal.features"):
+            LagFeatureBuilder(lags=[1, 2], feature_cols=["hr"]).fit_transform(self._df())
+        assert "Added 2 lag/rolling features" in caplog.text

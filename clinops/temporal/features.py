@@ -16,17 +16,27 @@ class LagFeatureBuilder:
     """
     Add lag and rolling-statistics features to windowed clinical data.
 
+    Rows are ordered by ``id_col`` and ``time_col`` before lags are taken, so
+    the input needs both columns. :class:`TemporalWindower` output has them
+    (``window_start``); for other data, pass the column that orders each
+    patient's rows as ``time_col``.
+
     Parameters
     ----------
     lags:
-        List of lag steps (in window units) to include.
-        e.g. [1, 2, 4] adds features at t-1, t-2, t-4 windows back.
+        Lag steps, in rows (windows), to add: ``[1, 2, 4]`` adds the values 1, 2,
+        and 4 windows back. Default ``None`` means ``[1, 2]``; pass ``[]`` for no
+        lags (e.g. only rolling statistics).
     rolling_windows:
-        List of rolling window sizes to compute mean/std over.
+        Window sizes, in rows, for rolling mean and standard deviation. Default
+        ``None`` means none.
     feature_cols:
-        Columns to create lags for. If None, all numeric columns are used.
+        Columns to create features for. Default ``None`` uses every numeric
+        column except ``id_col`` and ``label``.
     id_col:
-        Patient identifier column — lags are computed within each patient.
+        Patient identifier; lags never cross patients. Default ``"subject_id"``.
+    time_col:
+        Column that orders each patient's rows. Default ``"window_start"``.
 
     Examples
     --------
@@ -53,15 +63,32 @@ class LagFeatureBuilder:
         rolling_windows: list[int] | None = None,
         feature_cols: list[str] | None = None,
         id_col: str = "subject_id",
+        time_col: str = "window_start",
     ) -> None:
-        self.lags = lags or [1, 2]
-        self.rolling_windows = rolling_windows or []
+        self.lags = [1, 2] if lags is None else list(lags)
+        self.rolling_windows = [] if rolling_windows is None else list(rolling_windows)
         self.feature_cols = feature_cols
         self.id_col = id_col
+        self.time_col = time_col
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add lag and rolling features. Returns enriched DataFrame."""
-        df = df.copy().sort_values([self.id_col, "window_start"])
+        """
+        Add lag and rolling features. Returns the enriched DataFrame.
+
+        Raises
+        ------
+        ValueError
+            If ``id_col`` or ``time_col`` is missing from ``df``.
+        """
+        missing = [c for c in (self.id_col, self.time_col) if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"LagFeatureBuilder needs {missing} to order each patient's rows. "
+                "TemporalWindower output has 'window_start'; for other data, pass the "
+                "column that orders rows as time_col."
+            )
+        n_before = len(df.columns)
+        df = df.copy().sort_values([self.id_col, self.time_col])
         numeric_cols = self.feature_cols or [
             c
             for c in df.select_dtypes(include=[np.number]).columns
@@ -89,7 +116,7 @@ class LagFeatureBuilder:
                     lambda s, w=window: s.rolling(w, min_periods=1).std()
                 )
 
-        logger.info(f"Added {len(df.columns) - len(df.columns):,} lag/rolling features")
+        logger.info(f"Added {len(df.columns) - n_before:,} lag/rolling features")
         return df
 
 

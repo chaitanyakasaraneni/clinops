@@ -75,12 +75,18 @@ test_windows = imputer.transform(test_windows)
 | Strategy | Best for |
 |---|---|
 | `FORWARD_FILL` | Slowly-changing vitals — carry last observation forward |
-| `BACKWARD_FILL` | Values recorded with a documentation lag |
-| `LINEAR` | Continuous signals with regular sampling |
+| `BACKWARD_FILL` | Retrospective summaries only: copies later values backward, so never for prediction features (warns) |
+| `LINEAR` | Retrospective signal reconstruction: interpolates toward the next value, so never for prediction features (warns) |
 | `MEAN` | Fit on training set, fill with per-column or per-patient mean |
 | `MEDIAN` | As above, more robust to skewed lab distributions |
 | `INDICATOR` | Adds `{col}_missing` binary column — lets the model learn from missingness |
 | `NONE` | Leave `NaN` in place |
+
+### Fit on training data
+
+`MEAN` and `MEDIAN` need statistics, and those must come from the training data. Call `fit()` (or `fit_transform()`) on the training split, then `transform()` on the other splits. Calling `transform()` on an unfitted `MEAN` or `MEDIAN` imputer raises `RuntimeError` rather than quietly computing the statistic from the data being imputed.
+
+`BACKWARD_FILL` and `LINEAR` fill a gap from a later observation, so the filled value contains information from the future. They are kept for retrospective, descriptive work and emit a `UserWarning`; do not use them for features of a model that predicts forward in time.
 
 ### Per-patient mean/median
 

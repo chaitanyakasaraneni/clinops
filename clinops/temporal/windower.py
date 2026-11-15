@@ -75,11 +75,11 @@ class TemporalWindower:
         across each subject's windows in time order after aggregation:
         ``FORWARD_FILL`` carries the previous window's value, ``ZERO`` fills 0,
         ``INDICATOR`` adds ``{col}_missing`` columns, ``NONE`` leaves NaN.
-        ``BACKWARD_FILL`` and ``LINEAR`` draw on later windows, which leaks
-        future information into prediction features. ``MEAN`` and ``MEDIAN``
-        are not accepted here because they would be computed over every
-        subject, including any later test set; apply :class:`Imputer` after
-        splitting instead.
+        ``BACKWARD_FILL`` and ``LINEAR`` are not accepted: they would fill a
+        window from later windows, putting future information into the
+        features. ``MEAN`` and ``MEDIAN`` are not accepted either, because they
+        would be computed over every subject, including any later test set;
+        apply :class:`Imputer` after splitting instead.
     min_observations:
         Drop windows with fewer non-null observations than this threshold.
     aggregations:
@@ -140,9 +140,10 @@ class TemporalWindower:
                 "ImputationStrategy.NONE, split, then fit an Imputer on the training set."
             )
         if imputation in (ImputationStrategy.BACKWARD_FILL, ImputationStrategy.LINEAR):
-            logger.warning(
-                f"imputation={imputation.value!r} fills windows from later windows, so features "
-                "can include information from after the window ends"
+            raise ValueError(
+                f"imputation={imputation.value!r} is not supported in TemporalWindower because "
+                "it fills a window from later windows, so features would include information "
+                "from after the window ends. Use FORWARD_FILL, ZERO, INDICATOR, or NONE."
             )
 
     def fit_transform(
