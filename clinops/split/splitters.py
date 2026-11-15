@@ -482,8 +482,10 @@ class StratifiedPatientSplitter:
     patient_outcome_fn:
         Function that maps a patient's outcome values to one label. Default:
         the maximum value, so for a binary outcome any positive row makes the
-        patient positive, and for an ordinal outcome the patient gets their
-        highest class. Pass e.g. ``lambda s: s.iloc[-1]`` to use the last value.
+        patient positive, and for an ordinal outcome (numeric or an ordered
+        categorical) the patient gets their highest class. Non-ordinal labels
+        such as strings must be constant within each patient unless you pass
+        a function, e.g. ``lambda s: s.iloc[-1]`` for the last value.
     random_state:
         Random seed. Default 42.
 
@@ -543,8 +545,15 @@ class StratifiedPatientSplitter:
 
         rng = np.random.default_rng(self.random_state)
 
+        n_missing_id = int(df[self.id_col].isna().sum())
+        if n_missing_id:
+            logger.warning(
+                f"StratifiedPatientSplitter: {n_missing_id:,} rows have no {self.id_col!r} "
+                "and are left out of both splits"
+            )
+
         # One label per patient.
-        labels = df.groupby(self.id_col)[self.outcome_col].agg(self._outcome_fn)
+        labels = df.groupby(self.id_col, observed=True)[self.outcome_col].agg(self._outcome_fn)
         if labels.isna().any():
             raise ValueError(
                 f"patient_outcome_fn returned a missing label for {int(labels.isna().sum())} "
@@ -567,6 +576,11 @@ class StratifiedPatientSplitter:
                 n_test = min(n_test, len(members) - 1)
             test_patients |= set(rng.choice(members, size=n_test, replace=False))
         train_patients = set(labels.index) - test_patients
+        if not train_patients:
+            raise ValueError(
+                "StratifiedPatientSplitter: every class has a single patient, so the "
+                f"train split would be empty ({len(labels)} patients in total)"
+            )
 
         train = df[df[self.id_col].isin(train_patients)].reset_index(drop=True)
         test = df[df[self.id_col].isin(test_patients)].reset_index(drop=True)
@@ -611,9 +625,32 @@ class StratifiedPatientSplitter:
         )
 
 
+# infer_dtype kinds for which "maximum" is a meaningful patient label.
+_NUMERIC_KINDS = {"integer", "floating", "mixed-integer-float", "decimal", "boolean"}
+
+
 def _max_label(values: pd.Series) -> Hashable:
-    """Default patient label: the largest outcome value (any positive → positive)."""
-    return _py(values.max())
+    """
+    Default patient label: the largest outcome value (any positive → positive).
+
+    "Largest" is only meaningful for numeric, boolean, or ordered categorical
+    outcomes. For other labels (e.g. strings) every row of a patient must carry
+    the same value; otherwise a ``patient_outcome_fn`` is required.
+    """
+    dtype = values.dtype
+    ordered = isinstance(dtype, pd.CategoricalDtype) and bool(dtype.ordered)
+    numeric = pd.api.types.infer_dtype(values, skipna=True) in _NUMERIC_KINDS
+    if ordered or numeric:
+        return _py(values.max())
+    distinct = values.dropna().unique()
+    if len(distinct) > 1:
+        raise ValueError(
+            f"A patient has several different non-numeric outcome values "
+            f"({', '.join(map(repr, distinct[:5]))}); the default label (the maximum) "
+            "is not defined for them. Pass patient_outcome_fn to choose one label per "
+            "patient, e.g. lambda s: s.iloc[-1] for the last value."
+        )
+    return _py(distinct[0]) if len(distinct) else None
 
 
 def _py(value: Hashable) -> Hashable:

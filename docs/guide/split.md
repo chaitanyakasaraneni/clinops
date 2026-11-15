@@ -80,7 +80,9 @@ result.metadata["test_class_counts"]
 # {0: 410, 1: 233, 2: 98, 3: 31}
 ```
 
-Pass `patient_outcome_fn` to label patients differently, for example `lambda s: s.iloc[-1]` for the last recorded value. A class with a single patient can't be split; it goes to test and a warning is logged.
+The default label (the maximum) needs an ordering, so it applies to numeric, boolean, and ordered categorical outcomes. Non-ordinal labels such as strings must be the same on every row of a patient; otherwise `split()` raises and asks for a `patient_outcome_fn`. Pass one to label patients differently, for example `lambda s: s.iloc[-1]` for the last recorded value.
+
+A class with a single patient can't be split; it goes to test and a warning is logged. If that leaves train empty, `split()` raises. Rows with a missing `id_col` are left out of both splits, with a warning.
 
 ---
 

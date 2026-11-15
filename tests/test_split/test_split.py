@@ -304,6 +304,50 @@ class TestStratifiedMulticlass:
         assert "class 2 has only one patient" in caplog.text
         assert result.metadata["test_class_counts"][2] == 1
 
+    def test_all_singleton_classes_raise(self):
+        df = pd.DataFrame({"subject_id": [1, 2], "y": [0, 1]})
+        with pytest.raises(ValueError, match="train split would be empty"):
+            StratifiedPatientSplitter(outcome_col="y").split(df)
+
+    def test_rows_without_id_warn(self, caplog):
+        df = pd.DataFrame({"subject_id": [1, 2, 3, 4, None], "y": [0, 0, 1, 1, 1]})
+        with caplog.at_level("WARNING"):
+            result = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df)
+        assert "1 rows have no 'subject_id'" in caplog.text
+        assert result.train_size + result.test_size == 4
+
+    def test_ordered_categorical_uses_max(self):
+        severity = pd.CategoricalDtype(["mild", "severe"], ordered=True)
+        df = pd.DataFrame(
+            {
+                "subject_id": [1, 1, 2, 3, 4],
+                "y": pd.Series(["mild", "severe", "mild", "severe", "mild"], dtype=severity),
+            }
+        )
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        total = {
+            k: meta["train_class_counts"].get(k, 0) + meta["test_class_counts"].get(k, 0)
+            for k in ("mild", "severe")
+        }
+        assert total == {"mild": 2, "severe": 2}
+
+    @pytest.mark.parametrize("dtype", [object, "category"])
+    def test_varying_nominal_labels_need_outcome_fn(self, dtype):
+        df = pd.DataFrame(
+            {"subject_id": [1, 1, 2, 3], "y": pd.Series(["a", "b", "a", "b"], dtype=dtype)}
+        )
+        with pytest.raises(ValueError, match="Pass patient_outcome_fn"):
+            StratifiedPatientSplitter(outcome_col="y").split(df)
+        fn = StratifiedPatientSplitter(
+            outcome_col="y", test_size=0.5, patient_outcome_fn=lambda s: s.iloc[-1]
+        )
+        assert fn.split(df).metadata["n_test_patients"] == 2
+
+    def test_numbers_in_object_column_use_max(self):
+        df = pd.DataFrame({"subject_id": [1, 1, 2, 3], "y": pd.Series([0, 1, 0, 1], dtype=object)})
+        meta = StratifiedPatientSplitter(outcome_col="y", test_size=0.5).split(df).metadata
+        assert meta["test_class_counts"] == {0: 1, 1: 1}
+
     def test_large_test_size_keeps_one_patient_per_class_in_train(self):
         df = pd.DataFrame({"subject_id": range(4), "y": [0, 0, 1, 1]})
         result = StratifiedPatientSplitter(outcome_col="y", test_size=0.9).split(df)
