@@ -134,7 +134,7 @@ windows = windower.fit_transform(
 )
 ```
 
-Values still missing at the start of a stay stay `NaN`. Fill them with an `Imputer` fitted on the training split only (after step 5) so test data never influences the fill values.
+Values still missing at the start of a stay remain `NaN`. Fill them with an `Imputer` fitted on the training split only (after step 5) so test data never influences the fill values.
 
 ### 5. Add outcome and split
 

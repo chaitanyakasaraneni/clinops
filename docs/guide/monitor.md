@@ -102,7 +102,11 @@ report = DataQualityChecker(
 ## Typical pipeline integration
 
 ```python
+import logging
+
 from clinops.monitor import DistributionDriftDetector, DataQualityChecker
+
+logger = logging.getLogger(__name__)
 
 # Fit once on training data
 quality_checker = DataQualityChecker(required_columns=["subject_id", "charttime"])

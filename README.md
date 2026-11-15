@@ -384,7 +384,7 @@ aligned = CohortAligner(
     id_col="stay_id",
     max_hours_before=0,
     max_hours_after=48,
-).align(events_df=vitals, anchor_df=stays[["stay_id", "intime"]])
+).align(events_df=charts, anchor_df=stays[["stay_id", "intime"]])
 # → filtered to 48h after each stay's admission, with hours_from_anchor column
 ```
 

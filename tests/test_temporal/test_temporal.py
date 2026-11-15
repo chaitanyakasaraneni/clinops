@@ -942,8 +942,12 @@ class TestCohortAlignerAnchors:
 
     def test_duplicate_anchor_raises_with_guidance(self):
         aligner = CohortAligner(anchor_col="intime", id_col="subject_id")
-        with pytest.raises(ValueError, match=r"1 'subject_id' value.*id_col='stay_id'"):
+        with pytest.raises(ValueError, match=r"1 'subject_id' value.*id_col='stay_id'") as err:
             aligner.align(self._events(), self._stays())
+        # The suggested fix is valid Python that can be pasted as is.
+        suggestion = str(err.value).rsplit(" with ", 1)[1]
+        assert suggestion == "anchor_df.sort_values('intime').drop_duplicates('subject_id')"
+        compile(suggestion, "<message>", "eval")
 
     def test_identical_duplicate_rows_allowed(self):
         stays = pd.concat([self._stays(), self._stays()], ignore_index=True)

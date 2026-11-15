@@ -225,8 +225,8 @@ class CohortAligner:
                 f"CohortAligner: anchor_df has more than one {self.anchor_col!r} for "
                 f"{n_ids} {self.id_col!r} value(s), but each needs exactly one anchor. "
                 f"If these are patients with several ICU stays, align per stay with "
-                f"id_col='stay_id', or keep one row per patient, e.g. "
-                f"anchor_df.sort_values({self.anchor_col!r}).drop_duplicates({self.id_col!r})."
+                f"id_col='stay_id', or keep one row per patient with "
+                f"anchor_df.sort_values({self.anchor_col!r}).drop_duplicates({self.id_col!r})"
             )
 
         anchor_map = pd.to_datetime(anchors_by_id.set_index(self.id_col)[self.anchor_col])
