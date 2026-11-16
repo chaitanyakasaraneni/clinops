@@ -72,7 +72,8 @@ class ConversionSpec:
 #: so every registered pair is an exact inverse.
 _LINEAR_CONVERSIONS: list[tuple[str, str, str, str, str, float]] = [
     # Molar conversions: factor = molar mass (g/mol) / 10 for mg/dL per mmol/L.
-    ("glucose", "mmol_l", "mg_dl", "mmol/L", "mg/dL", 18.018),  # glucose 180.16 g/mol
+    # Glucose: the conventional 18.018 (its molar mass, 180.16 g/mol, gives 18.016).
+    ("glucose", "mmol_l", "mg_dl", "mmol/L", "mg/dL", 18.018),
     ("creatinine", "mg_dl", "umol_l", "mg/dL", "μmol/L", 88.42),  # 113.12 g/mol
     ("bun", "mmol_l", "mg_dl", "mmol/L", "mg/dL", 2.801),  # urea nitrogen (2 N) 28.01 g/mol
     ("bilirubin", "mg_dl", "umol_l", "mg/dL", "μmol/L", 17.104),  # 584.66 g/mol

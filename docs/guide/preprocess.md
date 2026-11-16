@@ -93,7 +93,7 @@ print(normalizer.report())
 | Weight | kg ↔ lb, kg ↔ g |
 | Height | cm ↔ in, cm ↔ m |
 
-Each conversion is defined once, from a physical constant: a molar mass for the lab conversions (for example 40.08 g/mol for calcium, so 1 mmol/L = 4.008 mg/dL) or the exact definitions 1 lb = 0.45359237 kg and 1 in = 2.54 cm. The reverse direction is the exact reciprocal, so converting a value there and back returns it unchanged.
+Each conversion is defined once, from a physical constant: a molar mass for the lab conversions (for example 40.08 g/mol for calcium, so 1 mmol/L = 4.008 mg/dL) or the exact definitions 1 lb = 0.45359237 kg and 1 in = 2.54 cm. (Glucose uses the conventional factor 18.018; its molar mass, 180.16 g/mol, gives 18.016.) The reverse direction is the exact reciprocal, so converting a value there and back returns it unchanged.
 
 For a single column whose unit is known for every row, the convenience functions (`glucose_mgdl_to_mmol`, `creatinine_umol_to_mgdl`, `celsius_to_fahrenheit`, and their reverses in `clinops.preprocess.units`) apply one conversion directly. Use `UnitNormalizer` when rows mix units and a companion column says which unit each row is in. Both use the same registry.
 
