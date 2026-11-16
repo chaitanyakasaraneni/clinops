@@ -349,6 +349,12 @@ class TemporalSplitter:
                     f"got {cutoff!r}"
                 )
             if not numeric:
+                # pd.Timestamp(1440) would silently mean 1440 ns after 1970.
+                if isinstance(cutoff, (int, float, np.number)):
+                    raise TypeError(
+                        f"time_col {self.time_col!r} holds datetimes, so cutoff must be a "
+                        f"date or timestamp, got the number {cutoff!r}"
+                    )
                 cutoff = pd.Timestamp(cutoff)
 
         n_missing = int(times.isna().sum())

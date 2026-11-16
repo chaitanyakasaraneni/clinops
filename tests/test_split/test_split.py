@@ -152,6 +152,11 @@ class TestTemporalSplitter:
         with pytest.raises(TypeError, match="must be a number"):
             TemporalSplitter(cutoff="2150-01-01", time_col="offset").split(df)
 
+    def test_numeric_cutoff_on_datetimes_raises(self):
+        df = pd.DataFrame({"charttime": pd.date_range("2150-01-01", periods=4, freq="h")})
+        with pytest.raises(TypeError, match="date or timestamp"):
+            TemporalSplitter(cutoff=24 * 60).split(df)
+
     def test_missing_times_warn_and_are_excluded(self, caplog):
         df = pd.DataFrame(
             {"charttime": pd.to_datetime(["2150-01-01", "2150-01-02", None, "2150-01-04"])}
