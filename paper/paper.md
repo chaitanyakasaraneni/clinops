@@ -110,8 +110,10 @@ observation gaps exceeding a configurable threshold. `LagFeatureBuilder` adds
 lagged and rolling-window features per patient. `CohortAligner` filters events to
 a specified time window relative to an anchor event (e.g., ICU admission), adding
 an `hours_from_anchor` column for downstream temporal modelling. `Imputer` provides
-fit/transform imputation (mean, median, forward fill, backward fill, linear,
-indicator) fitted on training data and applied to test data without leakage.
+fit/transform imputation (mean, median, forward fill, zero, indicator) fitted on
+training data and applied to test data without leakage; backward fill and linear
+interpolation, which draw on later values, are kept for retrospective work and
+warn when used.
 
 **`clinops.split`** provides three patient-aware splitting strategies.
 `TemporalSplitter` partitions by a time cutoff, preventing future observations
