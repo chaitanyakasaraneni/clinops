@@ -630,7 +630,12 @@ _VASOPRESSOR_NAME = re.compile(
     r"|vasopressin|dopamine)\b",
     re.IGNORECASE,
 )
-_VASOPRESSOR_BRANDS = {"levophed": "norepinephrine", "adrenalin": "epinephrine"}
+_VASOPRESSOR_BRANDS = {
+    "levophed": "norepinephrine",
+    "adrenalin": "epinephrine",
+    "neo-synephrine": "phenylephrine",
+    "neosynephrine": "phenylephrine",
+}
 #: Orders whose name contains a vasopressor but which are not systemic vasopressor
 #: therapy: local-anaesthetic combinations, eye and nasal drops, inhaled forms.
 _NOT_VASOPRESSOR_THERAPY = re.compile(

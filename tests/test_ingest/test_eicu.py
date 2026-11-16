@@ -778,6 +778,23 @@ def test_infusion_rate_drives_vasopressor_hours(eicu_dir: Path):
     assert hours[101] == [1, 2, 3, 4, 5]
 
 
+def test_brand_and_generic_names_are_one_infusion(eicu_dir: Path):
+    # A rate charted under the brand name is stopped by a zero rate charted under
+    # the generic name (and vice versa), because both map to the same drug.
+    _write_infusions(
+        eicu_dir,
+        [
+            (201, 60, "Neo-Synephrine (mcg/min)", "50"),
+            (201, 120, "Phenylephrine (mcg/min)", "0"),
+            (301, 0, "Norepinephrine (mcg/min)", "4"),
+            (301, 60, "Levophed (mcg/min)", "0"),
+        ],
+    )
+    hours = _vaso_hours(eicu_dir)
+    assert hours[201] == [1]
+    assert hours[301] == [0]
+
+
 def test_fallback_orders_skip_non_administered_and_non_systemic(eicu_dir: Path):
     # No infusionDrug file at all: every stay falls back to medication orders.
     _write_orders(
