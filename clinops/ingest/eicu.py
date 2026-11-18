@@ -725,7 +725,8 @@ class EicuCohortConfig(BaseModel):
         charted vasopressor infusion rates in ``infusionDrug``: an hour is
         flagged while a norepinephrine, epinephrine, phenylephrine,
         vasopressin, or dopamine infusion runs at a rate above zero (a charted
-        rate holds until the drug's next charting, for at most 4 hours). Stays
+        rate holds until the drug's next charting, for at most 4 hours; rows
+        with a blank rate are ignored). Stays
         at hospitals that chart no infusions fall back to ``medication``
         orders, matched by drug name or ``drughiclseqno`` code, skipping
         cancelled, as-needed (PRN), and one-time orders and non-systemic
@@ -1144,7 +1145,7 @@ class EicuTableLoader:
             )
         frames = [
             self._vasopressor_infusions(inf),
-            self._vasopressor_orders(med[med["patientunitstayid"].isin(fallback)]),
+            self._vasopressor_orders(med, fallback),
         ]
         frames = [f for f in frames if len(f)]
         if not frames:
@@ -1161,7 +1162,8 @@ class EicuTableLoader:
             rate=pd.to_numeric(inf["drugrate"], errors="coerce"),
             start=pd.to_numeric(inf["infusionoffset"], errors="coerce"),
         )
-        v = v[v["drug"].notna() & v["start"].notna()].sort_values(
+        # A blank rate is neither a start nor a stop, so those rows are ignored.
+        v = v[v["drug"].notna() & v["start"].notna() & v["rate"].notna()].sort_values(
             ["patientunitstayid", "drug", "start"]
         )
         # A charting holds until the same drug's next charting, at most the cap.
@@ -1171,16 +1173,18 @@ class EicuTableLoader:
         running = v[v["rate"] > 0]
         return self._interval_flag(running, "start", "stop", "vasopressor_flag")
 
-    def _vasopressor_orders(self, med: pd.DataFrame) -> pd.DataFrame:
+    def _vasopressor_orders(self, med: pd.DataFrame, stays: set[int]) -> pd.DataFrame:
         """
-        Fallback: vasopressor ``medication`` orders over their order interval.
+        Fallback: vasopressor ``medication`` orders of ``stays`` over their order interval.
 
         An order counts when its name is a vasopressor or, for the ~40% of rows
         without a name, its ``drughiclseqno`` is a code that only ever carries
-        vasopressor names in this data. Cancelled, as-needed (PRN), one-time, and
-        non-systemic orders are skipped.
+        vasopressor names in this data. The codes are learned from every order in
+        ``med``, not only those of ``stays``, since a drug code means the same drug
+        at every hospital. Cancelled, as-needed (PRN), one-time, and non-systemic
+        orders are skipped.
         """
-        if med.empty:
+        if med.empty or not stays:
             return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
         name = _text(med["drugname"])
         is_vaso_name = name.str.extract(_VASOPRESSOR_NAME, expand=False).notna() & ~(
@@ -1203,8 +1207,9 @@ class EicuTableLoader:
             & text("prn").ne("YES")
             & ~text("frequency").str.contains(r"\bONCE\b", regex=True)
         )
+        keep = is_vaso & given & med["patientunitstayid"].isin(stays)
         return self._interval_flag(
-            med[is_vaso & given], "drugstartoffset", "drugstopoffset", "vasopressor_flag"
+            med[keep], "drugstartoffset", "drugstopoffset", "vasopressor_flag"
         )
 
     def _legacy_vasopressor_orders(self, med: pd.DataFrame) -> pd.DataFrame:

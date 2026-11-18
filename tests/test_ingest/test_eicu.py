@@ -795,6 +795,34 @@ def test_brand_and_generic_names_are_one_infusion(eicu_dir: Path):
     assert hours[301] == [0]
 
 
+def test_blank_infusion_rate_is_ignored(eicu_dir: Path):
+    # A charting with no rate neither stops the running infusion nor starts one.
+    _write_infusions(
+        eicu_dir,
+        [
+            (201, 60, "Norepinephrine (mcg/min)", "5"),
+            (201, 120, "Norepinephrine (mcg/min)", ""),
+            (201, 180, "Norepinephrine (mcg/min)", "0"),
+        ],
+    )
+    assert _vaso_hours(eicu_dir)[201] == [1, 2]
+
+
+def test_drug_codes_are_learned_from_every_hospital(eicu_dir: Path):
+    # 201's hospital charts infusions, so its own orders are not used for its flag,
+    # but its named order still teaches that HICL 2051 is norepinephrine. 101 is at
+    # a hospital without infusion charting; its unnamed order with that code counts.
+    _write_infusions(eicu_dir, [(201, 60, "Norepinephrine (mcg/min)", "5")])
+    _write_orders(
+        eicu_dir,
+        [
+            {"patientunitstayid": 201, "drugname": "NOREPINEPHRINE", "drughiclseqno": 2051},
+            {"patientunitstayid": 101, "drugname": np.nan, "drughiclseqno": 2051},
+        ],
+    )
+    assert _vaso_hours(eicu_dir)[101] == [1, 2, 3, 4, 5]
+
+
 def test_fallback_orders_skip_non_administered_and_non_systemic(eicu_dir: Path):
     # No infusionDrug file at all: every stay falls back to medication orders.
     _write_orders(

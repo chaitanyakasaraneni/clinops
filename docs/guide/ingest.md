@@ -172,7 +172,7 @@ phenylephrine, vasopressin, or dopamine) was running. By default
 `infusionDrug`: an hour is flagged while an infusion runs at a rate above zero.
 A charted rate holds until that drug's next charting, for at most 4 hours (in
 the eICU-CRD demo, half of consecutive chartings are 60 minutes apart and 90%
-are at most 200 minutes apart).
+are at most 200 minutes apart). Rows with a blank rate are ignored.
 
 Stays at hospitals that chart no infusions fall back to `medication`. That table
 holds *orders*, not administrations, and about 40% of its rows have no
