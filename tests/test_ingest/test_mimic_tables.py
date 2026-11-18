@@ -404,3 +404,34 @@ def test_summary_reads_parquet_tables(tmp_path, capsys):
     result = MimicTableLoader(root).summary()
     assert (result["rows_sampled"] > 0).all()
     assert result.loc[result["table"] == "icustays", "columns"].item() == 8
+
+
+class TestHead:
+    """summary()'s sampler reads only the first rows of CSV and Parquet tables."""
+
+    def test_parquet_reads_only_first_rows(self, tmp_path):
+        from clinops.ingest.mimic_tables import _head
+
+        path = tmp_path / "t.parquet"
+        pd.DataFrame({"a": range(50), "b": ["x"] * 50}).to_parquet(path, index=False)
+        out = _head(path, 10)
+        assert out["a"].tolist() == list(range(10))
+
+    def test_empty_parquet_keeps_columns(self, tmp_path):
+        # A zero-row Parquet file yields no batches; the columns still come back.
+        from clinops.ingest.mimic_tables import _head
+
+        path = tmp_path / "empty.parquet"
+        pd.DataFrame({"a": pd.Series(dtype="int64"), "b": pd.Series(dtype="str")}).to_parquet(
+            path, index=False
+        )
+        out = _head(path, 10)
+        assert out.empty
+        assert list(out.columns) == ["a", "b"]
+
+    def test_csv_reads_only_first_rows(self, tmp_path):
+        from clinops.ingest.mimic_tables import _head
+
+        path = tmp_path / "t.csv"
+        pd.DataFrame({"a": range(50)}).to_csv(path, index=False)
+        assert len(_head(path, 10)) == 10
