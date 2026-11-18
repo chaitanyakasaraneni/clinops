@@ -13,6 +13,7 @@ from clinops.preprocess.units import (
     UNIT_CONVERSIONS,
     celsius_to_fahrenheit,
     creatinine_mgdl_to_umol,
+    creatinine_umol_to_mgdl,
     fahrenheit_to_celsius,
     glucose_mgdl_to_mmol,
     glucose_mmol_to_mgdl,
@@ -195,8 +196,8 @@ class TestUnitNormalizer:
         normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
         result = normalizer.transform(glucose_df)
         # mmol/L rows should now be in mg/dL (~18x)
-        assert result.loc[1, "glucose"] == pytest.approx(5.5 * 18.018, rel=0.01)
-        assert result.loc[3, "glucose"] == pytest.approx(7.2 * 18.018, rel=0.01)
+        assert result.loc[1, "glucose"] == pytest.approx(5.5 * 18.018)
+        assert result.loc[3, "glucose"] == pytest.approx(7.2 * 18.018)
         # mg/dL rows should be unchanged
         assert result.loc[0, "glucose"] == 126.0
         assert result.loc[2, "glucose"] == 180.0
@@ -209,7 +210,7 @@ class TestUnitNormalizer:
             warnings.simplefilter("error", FutureWarning)
             result = normalizer.transform(df)
         assert result.loc[0, "glucose"] == 126.0
-        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018, rel=0.01)
+        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018)
         assert (result["glucose_unit"] == "mg/dL").all()
 
     def test_unit_column_nullable_integer_values(self):
@@ -222,7 +223,7 @@ class TestUnitNormalizer:
         normalizer = UnitNormalizer(column_unit_map={"glucose": "glucose_unit"})
         result = normalizer.transform(df)
         assert result["glucose"].dtype == "Float64"
-        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018, rel=0.01)
+        assert result.loc[1, "glucose"] == pytest.approx(6 * 18.018)
         assert pd.isna(result.loc[2, "glucose"])
 
     def test_unit_column_integer_dtype_kept_when_nothing_converted(self):
@@ -374,3 +375,49 @@ class TestICDMapper:
         desc = mapper.describe("4280")
         assert desc != "No description available"
         assert len(desc) > 0
+
+
+class TestConversionRegistry:
+    """pyOpenSci #36: registered pairs are exact inverses and round-trip."""
+
+    def test_every_conversion_has_its_inverse(self):
+        for key in UNIT_CONVERSIONS:
+            var, a, b = key.split("__")
+            assert f"{var}__{b}__{a}" in UNIT_CONVERSIONS, key
+
+    @pytest.mark.parametrize("key", sorted(UNIT_CONVERSIONS))
+    def test_round_trip(self, key):
+        var, a, b = key.split("__")
+        values = pd.Series([0.0, 0.5, 1.0, 37.0, 98.6, 140.0, 1234.5])
+        there = UNIT_CONVERSIONS[key].convert(values)
+        back = UNIT_CONVERSIONS[f"{var}__{b}__{a}"].convert(there)
+        assert back.tolist() == pytest.approx(values.tolist(), rel=1e-12, abs=1e-9)
+
+    @pytest.mark.parametrize(
+        ("key", "value", "expected"),
+        [
+            ("glucose__mmol_l__mg_dl", 5.5, 99.099),
+            ("calcium__mmol_l__mg_dl", 2.5, 10.02),
+            ("phosphate__mmol_l__mg_dl", 1.0, 3.097),
+            ("weight__lb__kg", 1.0, 0.45359237),
+            ("height__in__cm", 1.0, 2.54),
+            ("temperature__f__c", 98.6, 37.0),
+            ("temperature__c__k", 0.0, 273.15),
+        ],
+    )
+    def test_reference_values(self, key, value, expected):
+        result = UNIT_CONVERSIONS[key].convert(pd.Series([value]))
+        assert result.iloc[0] == pytest.approx(expected)
+
+    def test_convenience_functions_use_the_registry(self):
+        s = pd.Series([1.0, 5.5, 37.0])
+        pairs = [
+            (glucose_mgdl_to_mmol, "glucose__mg_dl__mmol_l"),
+            (glucose_mmol_to_mgdl, "glucose__mmol_l__mg_dl"),
+            (creatinine_mgdl_to_umol, "creatinine__mg_dl__umol_l"),
+            (creatinine_umol_to_mgdl, "creatinine__umol_l__mg_dl"),
+            (celsius_to_fahrenheit, "temperature__c__f"),
+            (fahrenheit_to_celsius, "temperature__f__c"),
+        ]
+        for fn, key in pairs:
+            pd.testing.assert_series_equal(fn(s), UNIT_CONVERSIONS[key].convert(s))
