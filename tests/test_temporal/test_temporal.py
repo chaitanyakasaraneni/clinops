@@ -1013,6 +1013,16 @@ class TestLagFeatureBuilderInputs:
         with pytest.raises(ValueError, match="window_start"):
             LagFeatureBuilder(feature_cols=["hr"]).fit_transform(df)
 
+    def test_missing_id_col_raises(self):
+        df = self._df().drop(columns="subject_id")
+        with pytest.raises(ValueError, match="subject_id"):
+            LagFeatureBuilder(feature_cols=["hr"]).fit_transform(df)
+
+    def test_missing_both_columns_lists_both(self):
+        df = self._df().drop(columns=["subject_id", "window_start"])
+        with pytest.raises(ValueError, match=r"\['subject_id', 'window_start'\]"):
+            LagFeatureBuilder(feature_cols=["hr"]).fit_transform(df)
+
     def test_custom_time_col_orders_rows(self):
         out = LagFeatureBuilder(lags=[1], feature_cols=["hr"], time_col="charttime").fit_transform(
             self._df("charttime")
