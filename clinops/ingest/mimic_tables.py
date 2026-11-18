@@ -154,8 +154,9 @@ class MimicTableLoader:
     * ``with_los_band`` flag on ``icustays`` to add a categorical
       ``los_band`` column (``<1d``, ``1-3d``, ``3-7d``, ``>7d``) useful
       as a stratification variable.
-    * A ``summary()`` method that prints row counts and null rates for
-      all five tables without loading full data.
+    * A ``summary()`` method that prints column counts and estimated null
+      rates for all five tables from their first 10,000 rows, without
+      loading full data.
 
     Parameters
     ----------
