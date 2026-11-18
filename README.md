@@ -164,7 +164,7 @@ dx = tbl.diagnoses_icd(subject_ids=[10000032], primary_only=True)
 stays = tbl.icustays(subject_ids=[10000032], with_los_band=True)
 ```
 
-Audit a new MIMIC download without loading full tables into memory:
+Audit a new MIMIC download without loading full tables into memory (column counts and null rates estimated from the first 10,000 rows of each table; `rows_sampled` is that sample's size, not the table's row count):
 
 ```python
 tbl.summary()

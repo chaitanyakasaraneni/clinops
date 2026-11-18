@@ -35,7 +35,7 @@ stays = tbl.icustays(subject_ids=[10000032], with_los_band=True)
 
 ### Audit a new MIMIC download
 
-Check row counts, column counts, and null rates without loading full tables:
+Check column counts and null rates without loading full tables. Only the first 10,000 rows of each table are read, so `rows_sampled` is the sample size (at most 10,000), not the table's row count, and the null rate is an estimate from those rows:
 
 ```python
 tbl.summary()

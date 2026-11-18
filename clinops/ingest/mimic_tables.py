@@ -154,8 +154,9 @@ class MimicTableLoader:
     * ``with_los_band`` flag on ``icustays`` to add a categorical
       ``los_band`` column (``<1d``, ``1-3d``, ``3-7d``, ``>7d``) useful
       as a stratification variable.
-    * A ``summary()`` method that prints row counts and null rates for
-      all five tables without loading full data.
+    * A ``summary()`` method that prints column counts and estimated null
+      rates for all five tables from their first 10,000 rows, without
+      loading full data.
 
     Parameters
     ----------
@@ -359,11 +360,12 @@ class MimicTableLoader:
 
     def summary(self) -> pd.DataFrame:
         """
-        Print a quick-look table of row counts and null rates for all five
+        Print a quick-look table of column counts and null rates for all five
         tables without loading the full data into memory.
 
-        Uses ``pd.read_csv`` with ``nrows=0`` to read headers, then scans
-        only the first 10,000 rows to estimate null rates.
+        Reads only the first 10,000 rows of each table (CSV, CSV.GZ, or
+        Parquet) and estimates the null rate from them; ``rows_sampled`` is
+        the number of rows read, not the table's size.
 
         Returns
         -------
@@ -374,7 +376,7 @@ class MimicTableLoader:
         for table_name in ["chartevents", "labevents", "admissions", "diagnoses_icd", "icustays"]:
             try:
                 path = self._resolve_extra_path(table_name)
-                sample = pd.read_csv(path, nrows=10_000, low_memory=False)
+                sample = _head(path, 10_000)
                 null_rate = sample.isnull().mean().mean() * 100
                 records.append(
                     {
@@ -426,3 +428,20 @@ class MimicTableLoader:
             )
         # Fall back to MimicLoader's path resolver for shared tables
         return self._loader._resolve_table_path(table_name)
+
+
+def _head(path: Path, n: int) -> pd.DataFrame:
+    """The first ``n`` rows of a CSV, CSV.GZ, or Parquet table, without reading it all."""
+    if path.suffix == ".parquet":
+        import pyarrow.parquet as pq
+
+        # pyarrow lacks annotations here, so mypy --strict flags the calls.
+        batches = pq.ParquetFile(path).iter_batches(  # type: ignore[no-untyped-call, unused-ignore]
+            batch_size=n
+        )
+        first = next(batches, None)
+        if first is None:
+            return pd.read_parquet(path)
+        frame: pd.DataFrame = first.to_pandas()
+        return frame
+    return pd.read_csv(path, nrows=n, low_memory=False)
