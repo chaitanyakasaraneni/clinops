@@ -140,6 +140,8 @@ class TestTemporalSplitter:
     def test_train_frac_must_be_a_proper_fraction(self, frac):
         with pytest.raises(ValueError, match="train_frac"):
             TemporalSplitter(train_frac=frac)
+        with pytest.raises(ValueError, match="train_frac"):  # also with an explicit cutoff
+            TemporalSplitter(cutoff="2150-07-01", train_frac=frac)
 
     def test_numeric_times_stay_numbers(self):
         # eICU-style minute offsets: the cutoff is a number, not a 1970 timestamp.

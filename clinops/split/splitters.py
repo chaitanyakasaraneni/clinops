@@ -271,12 +271,14 @@ class TemporalSplitter:
     Parameters
     ----------
     cutoff:
-        Datetime string, pd.Timestamp, or None. If None, ``train_frac``
-        is used to compute the cutoff automatically from the data.
+        Where to split. For a datetime ``time_col``, a datetime string or
+        ``pd.Timestamp``; for a numeric ``time_col`` (e.g. minute offsets), a
+        number. A cutoff of the wrong kind raises ``TypeError``. If None
+        (default), the cutoff is computed from the data with ``train_frac``.
     train_frac:
         Fraction of the time range to use for training when ``cutoff``
-        is None. Must be strictly between 0 and 1. Default 0.8 (the earliest
-        80% of the time range is train).
+        is None (ignored otherwise). Must be strictly between 0 and 1 either
+        way. Default 0.8 (the earliest 80% of the time range is train).
     time_col:
         Time column. Datetimes (or strings parsed as datetimes) are compared
         as timestamps. A numeric column, such as eICU's minute offsets from
@@ -311,7 +313,7 @@ class TemporalSplitter:
         train_frac: float = 0.8,
         time_col: str = "charttime",
     ) -> None:
-        if cutoff is None and not 0 < train_frac < 1:
+        if not 0 < train_frac < 1:
             raise ValueError(
                 f"train_frac must be strictly between 0 and 1, got {train_frac}; "
                 "otherwise one split is empty"
