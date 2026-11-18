@@ -1029,6 +1029,26 @@ class TestLagFeatureBuilderInputs:
         assert not any("lag" in c for c in out.columns)
         assert "hr_roll2_mean" in out.columns
 
+    @pytest.mark.parametrize(
+        "kwargs",
+        [{"lags": [0]}, {"lags": [-1]}, {"lags": [1.5]}, {"rolling_windows": [0]}],
+    )
+    def test_non_positive_steps_raise(self, kwargs):
+        # A lag of 0 or below would copy the current or a future value into the row.
+        with pytest.raises(ValueError, match="positive integers"):
+            LagFeatureBuilder(**kwargs)
+
+    def test_explicit_empty_feature_cols_adds_nothing(self):
+        df = self._df()
+        out = LagFeatureBuilder(feature_cols=[]).fit_transform(df)
+        assert list(out.columns) == list(df.columns)
+
+    def test_default_columns_skip_numeric_time_col(self):
+        df = pd.DataFrame({"subject_id": [1, 1, 1], "hour": [0, 1, 2], "hr": [1.0, 2.0, 3.0]})
+        out = LagFeatureBuilder(lags=[1], time_col="hour").fit_transform(df)
+        assert "hr_lag1" in out.columns
+        assert "hour_lag1" not in out.columns
+
     def test_log_reports_added_columns(self, caplog):
         with caplog.at_level("INFO", logger="clinops.temporal.features"):
             LagFeatureBuilder(lags=[1, 2], feature_cols=["hr"]).fit_transform(self._df())

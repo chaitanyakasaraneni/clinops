@@ -137,6 +137,8 @@ enriched = LagFeatureBuilder(
 
 Lags and rolling statistics are computed per-patient when `id_col` is set, preventing values from one patient's last window from appearing as features in the next patient's first window.
 
+Without `feature_cols`, every numeric column except `id_col`, `time_col`, and `label` gets lag and rolling features. If the frame carries an outcome (for example `hospital_expire_flag` merged on for splitting), its lags would put the label into the features, so pass `feature_cols` explicitly. Lags and window sizes must be positive integers.
+
 ---
 
 ## CohortAligner
