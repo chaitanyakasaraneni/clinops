@@ -392,7 +392,7 @@ class TemporalSplitter:
             train=train,
             test=test,
             metadata={
-                "cutoff": cutoff if numeric else str(cutoff),
+                "cutoff": _py(cutoff) if numeric else str(cutoff),
                 "time_col": self.time_col,
                 "train_rows": len(train),
                 "test_rows": len(test),

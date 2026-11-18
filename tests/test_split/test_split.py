@@ -146,6 +146,7 @@ class TestTemporalSplitter:
         df = pd.DataFrame({"offset": [0, 60, 120, 180, 240]})
         result = TemporalSplitter(train_frac=0.5, time_col="offset").split(df)
         assert result.metadata["cutoff"] == 120.0
+        assert type(result.metadata["cutoff"]) is float  # plain Python, not NumPy
         assert result.train["offset"].tolist() == [0, 60]
         result = TemporalSplitter(cutoff=200, time_col="offset").split(df)
         assert result.test["offset"].tolist() == [240]
