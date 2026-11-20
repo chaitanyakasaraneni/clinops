@@ -1,5 +1,5 @@
 """
-Outlier detection and clipping using physiologically-grounded bounds.
+Outlier detection and clipping using physiological plausibility bounds.
 
 Clinical data contains a high rate of physiologically impossible values —
 transcription errors, unit mix-ups, device artefacts, and data entry
@@ -8,17 +8,16 @@ inappropriate here because true extreme values (e.g., a heart rate of
 180 in a patient with SVT) are clinically meaningful and should not be
 removed.
 
-This module uses published physiological bounds from clinical literature
-to clip or flag values that are impossible regardless of patient state,
-while preserving extreme-but-plausible values.
+This module clips or flags values that are impossible regardless of
+patient state, while preserving extreme-but-plausible values.
 
-References
-----------
-Johnson et al. (2023). MIMIC-IV, a freely accessible electronic health
-record dataset. Scientific Data, 10(1), 1.
-
-Goldberger et al. (2000). PhysioBank, PhysioToolkit, and PhysioNet.
-Circulation, 101(23), e215–e220.
+The built-in bounds (``VITAL_BOUNDS``, ``LAB_BOUNDS``) are plausibility
+limits, not reference ranges: deliberately wide bounds outside which a value
+is physically impossible or almost certainly a recording, unit, or device
+error. They were chosen by the clinops authors and are not taken from a
+single published source. Review them for your setting; every bound can be
+replaced (``bounds=``), extended (``extra_bounds=``), or added
+(``add_bounds()``).
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ class BoundSpec:
 
 
 # -----------------------------------------------------------------------
-# Published physiological bounds
+# Plausibility bounds (chosen by the clinops authors; see module docstring)
 # -----------------------------------------------------------------------
 
 #: Vital sign bounds — values outside these ranges are physiologically
@@ -53,7 +52,7 @@ class BoundSpec:
 VITAL_BOUNDS: dict[str, BoundSpec] = {
     "heart_rate": BoundSpec("heart_rate", 0, 300, "bpm", "Asystole to extreme tachycardia"),
     "resp_rate": BoundSpec("resp_rate", 0, 80, "breaths/min", "Apnoea to extreme tachypnoea"),
-    "spo2": BoundSpec("spo2", 50, 100, "%", "Incompatible with life below 50%"),
+    "spo2": BoundSpec("spo2", 50, 100, "%", "Readings below 50% treated as artefact"),
     "sbp": BoundSpec("sbp", 0, 300, "mmHg", "Systolic blood pressure"),
     "dbp": BoundSpec("dbp", 0, 200, "mmHg", "Diastolic blood pressure"),
     "map": BoundSpec("map", 0, 250, "mmHg", "Mean arterial pressure"),
@@ -70,7 +69,7 @@ LAB_BOUNDS: dict[str, BoundSpec] = {
     # Metabolic
     "glucose": BoundSpec("glucose", 0, 2000, "mg/dL", "Hypoglycaemia to extreme hyperglycaemia"),
     "glucose_mmol": BoundSpec("glucose_mmol", 0, 111, "mmol/L", "mmol/L equivalent"),
-    "sodium": BoundSpec("sodium", 90, 200, "mEq/L", "Compatible with life"),
+    "sodium": BoundSpec("sodium", 90, 200, "mEq/L", "Values outside 90–200 treated as errors"),
     "potassium": BoundSpec("potassium", 1.0, 10.0, "mEq/L", "Severe hypo- to hyperkalaemia"),
     "chloride": BoundSpec("chloride", 60, 150, "mEq/L"),
     "bicarbonate": BoundSpec("bicarbonate", 0, 60, "mEq/L"),
@@ -92,7 +91,7 @@ LAB_BOUNDS: dict[str, BoundSpec] = {
     "pt": BoundSpec("pt", 0, 200, "seconds"),
     "ptt": BoundSpec("ptt", 0, 400, "seconds"),
     # ABG
-    "ph": BoundSpec("ph", 6.5, 7.9, "pH", "Arterial pH — incompatible outside this range"),
+    "ph": BoundSpec("ph", 6.5, 7.9, "pH", "Arterial pH; values outside 6.5–7.9 treated as errors"),
     "pao2": BoundSpec("pao2", 0, 700, "mmHg", "PaO2 on 100% O2"),
     "paco2": BoundSpec("paco2", 0, 150, "mmHg"),
     "lactate": BoundSpec("lactate", 0, 30, "mmol/L"),
@@ -103,8 +102,9 @@ class ClinicalOutlierClipper:
     """
     Detect and clip physiologically impossible values in clinical DataFrames.
 
-    Uses published physiological bounds to identify values that are
-    impossible regardless of patient state. Values outside bounds are
+    Uses plausibility bounds to identify values that are impossible
+    regardless of patient state (see the module docstring for how the
+    built-in bounds were chosen). Values outside bounds are
     either clipped to the boundary (default) or replaced with NaN.
 
     Parameters
