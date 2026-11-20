@@ -396,8 +396,8 @@ Clinical data has unique missingness patterns that standard ML windowing gets wr
 | Strategy | Best for |
 |---|---|
 | `FORWARD_FILL` | Slowly-changing vitals — carry last observation forward |
-| `BACKWARD_FILL` | Values recorded with lag |
-| `LINEAR` | Continuous signals with regular sampling |
+| `BACKWARD_FILL` | Retrospective summaries only: copies later values backward, so never for prediction features (warns) |
+| `LINEAR` | Retrospective signal reconstruction: interpolates toward the next value, so never for prediction features (warns) |
 | `MEAN` / `MEDIAN` | Fit on training set, apply to test (no leakage) |
 | `INDICATOR` | Adds `{col}_missing` binary column — lets model learn from missingness |
 | `NONE` | Leave NaN in place |
