@@ -989,3 +989,27 @@ def test_fallback_without_order_status_columns(eicu_dir: Path):
     )
     med.to_csv(eicu_dir / "medication.csv", index=False)
     assert _vaso_hours(eicu_dir)[101] == [1, 2, 3, 4, 5]
+
+
+class TestDrugCodeTally:
+    def test_codes_that_only_carry_vasopressor_names(self):
+        from clinops.ingest.eicu import _DrugCodeTally
+
+        tally = _DrugCodeTally()
+        tally.tally(
+            pd.DataFrame(
+                {
+                    "drugname": ["NOREPINEPHRINE", "Levophed", "PHENYLEPHRINE", "SALINE", np.nan],
+                    "drughiclseqno": [2051, 2051, 77, 77, 999],
+                }
+            )
+        )
+        # 2051 only ever carries vasopressor names; 77 also carries saline; 999 has no name.
+        assert tally.vasopressor_codes() == {2051.0}
+
+    def test_table_without_code_column_teaches_nothing(self):
+        from clinops.ingest.eicu import _DrugCodeTally
+
+        tally = _DrugCodeTally()
+        tally.tally(pd.DataFrame({"drugname": ["NOREPINEPHRINE"]}))
+        assert tally.vasopressor_codes() == set()
