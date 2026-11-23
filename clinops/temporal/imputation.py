@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+import warnings
 from enum import StrEnum
 
 import numpy as np
@@ -30,20 +31,27 @@ class ImputationStrategy(StrEnum):
         measurements are assumed stable until updated.
 
     BACKWARD_FILL
-        Fill from the next observed value backward. Useful when a
-        measurement is known to have been taken but not yet recorded.
+        Fill from the next observed value backward. This copies a later
+        measurement into earlier rows, so the filled values contain
+        information from the future. Never use it to build features for a
+        model that predicts forward in time. It suits only descriptive or
+        retrospective summaries in which later values are legitimately known
+        (e.g. a stay-level table). Constructing an ``Imputer`` with it warns.
 
     LINEAR
-        Linear interpolation between surrounding observations. Use for
-        continuous physiological signals with regular sampling.
+        Linear interpolation between the surrounding observations. Each
+        filled value depends on the *next* observation, so, like
+        ``BACKWARD_FILL``, it leaks future information into prediction
+        features. Use it for retrospective signal reconstruction, not for
+        model inputs. Constructing an ``Imputer`` with it warns.
 
     MEAN
-        Replace missing values with the column mean (global, per patient,
-        or per cohort depending on ``fit`` scope).
+        Replace missing values with the column mean learned in ``fit``:
+        over all rows, or per patient with ``per_patient=True``. ``fit``
+        must be called first, on training data only.
 
     MEDIAN
-        Replace with column median. More robust than mean for skewed
-        lab values.
+        Like ``MEAN`` with the median. More robust for skewed lab values.
 
     ZERO
         Fill with zero. Use only for count-based features where absence
@@ -135,6 +143,14 @@ class Imputer:
             raise ValueError("max_gap_hours requires time_col to be set")
         if per_patient and not id_col:
             raise ValueError("per_patient=True requires id_col to be set")
+        if strategy in (ImputationStrategy.BACKWARD_FILL, ImputationStrategy.LINEAR):
+            warnings.warn(
+                f"ImputationStrategy.{strategy.name} fills a gap from a later observation, so "
+                "filled values contain future information; do not use it for features of a "
+                "model that predicts forward in time.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.strategy = strategy
         self.max_gap_hours = max_gap_hours
         self.time_col = time_col
@@ -157,7 +173,16 @@ class Imputer:
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply imputation to df. Call fit() first for MEAN/MEDIAN strategies."""
+        """
+        Apply imputation to ``df``.
+
+        Raises
+        ------
+        RuntimeError
+            For ``MEAN`` / ``MEDIAN`` if :meth:`fit` has not been called. Their
+            statistics must come from training data, never from the data being
+            transformed.
+        """
         df = df.copy()
         numeric_cols = [
             c for c in df.select_dtypes(include=[np.number]).columns if c != self.id_col
@@ -206,14 +231,13 @@ class Imputer:
                 )
 
         elif self.strategy in (ImputationStrategy.MEAN, ImputationStrategy.MEDIAN):
-            if self._fitted:
-                fill_values, patient_stats = self._fill_values, self._patient_stats
-            else:
-                logger.warning(
-                    f"Imputer not fitted; using column {self.strategy.value}s from the current "
-                    "df. Call fit() on training data to avoid leakage."
+            if not self._fitted:
+                raise RuntimeError(
+                    f"Imputer({self.strategy.name}) is not fitted. Call fit() on the training "
+                    "data first (or fit_transform() on the training data), then transform() "
+                    "the other splits, so no statistic is computed from the data being imputed."
                 )
-                fill_values, patient_stats = self._compute_stats(df)
+            fill_values, patient_stats = self._fill_values, self._patient_stats
             for col in numeric_cols:
                 series = df[col]
                 if patient_stats is not None and has_id and col in patient_stats.columns:
@@ -232,7 +256,12 @@ class Imputer:
         return df
 
     def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Convenience method: fit then transform."""
+        """
+        Fit on ``df`` and impute it. Use on the training data only.
+
+        For validation or test data call :meth:`transform` on the imputer fitted
+        here, so their missing values are filled from training statistics.
+        """
         return self.fit(df).transform(df)
 
     # ------------------------------------------------------------------
