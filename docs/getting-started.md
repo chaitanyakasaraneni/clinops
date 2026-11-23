@@ -8,12 +8,11 @@ Requires Python **3.12+**.
 pip install clinops
 ```
 
-Install optional extras for FHIR or cloud support:
+Install optional extras for cloud support (the FHIR R4 loader is in the core install):
 
 ```bash
-pip install clinops[fhir]   # FHIR R4 loader
-pip install clinops[gcp]    # Google Cloud Storage / BigQuery
-pip install clinops[aws]    # AWS S3 / boto3
+pip install clinops[gcp]    # Google Cloud Storage
+pip install clinops[aws]    # AWS S3 and Step Functions (boto3)
 ```
 
 For development (includes tests, linting, and docs):
@@ -48,7 +47,12 @@ from clinops.ingest import MimicTableLoader
 # in chunks and the filters below are applied to each one, so only matching
 # rows are kept in memory.
 tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
-subjects = list(range(10000032, 10000132))
+
+# ICU stays (a small table). A patient can have several, each with its own
+# intime. Take the first 100 patients with an ICU stay for this example.
+stays = tbl.icustays()
+subjects = stays["subject_id"].drop_duplicates().head(100).tolist()
+stays = stays[stays["subject_id"].isin(subjects)]
 
 # MIMIC-IV item IDs for four vital signs. Mean arterial pressure is charted
 # as invasive (220052) or non-invasive (220181); both map to "map".
@@ -62,9 +66,6 @@ VITALS = {
 
 # ICU chartevents (long format: one row per measurement, charttime parsed)
 charts = tbl.chartevents(subject_ids=subjects, item_ids=list(VITALS))
-
-# ICU stays. A patient can have several, each with its own intime
-stays = tbl.icustays(subject_ids=subjects)
 
 # Admissions contain the hospital_expire_flag outcome
 adm = tbl.admissions(subject_ids=subjects)
