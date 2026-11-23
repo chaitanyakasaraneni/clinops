@@ -36,7 +36,7 @@ print(clinops.__version__)
 
 This walkthrough mirrors a typical research workflow: load MIMIC-IV data, preprocess it, build temporal windows, and produce a patient-level train/test split without data leakage. It predicts in-hospital mortality from the first 48 hours of each ICU stay.
 
-The code is written for MIMIC-IV 2.2. CI runs it unchanged on a small synthetic copy of the tables that includes patients with several ICU stays.
+The code is written for MIMIC-IV 2.2, which requires credentialed access through PhysioNet. It also runs unchanged on the open [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) (100 patients, no credentialing): point the loader at the demo directory. CI runs it on a small synthetic copy of the tables that includes patients with several ICU stays.
 
 ### 1. Load data
 
