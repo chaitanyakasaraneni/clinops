@@ -254,6 +254,14 @@ class MimicTableLoader:
 
         Parameters
         ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        item_ids:
+            Restrict to these MIMIC itemids (see ``d_labitems``).
+        start_time, end_time:
+            ISO datetime strings for time range filtering.
         with_ref_range:
             If ``False`` (default), drop ``ref_range_lower`` /
             ``ref_range_upper`` columns — they are sparsely populated in
@@ -286,6 +294,13 @@ class MimicTableLoader:
         ``subject_id``, ``hadm_id``, ``admittime``, ``dischtime``,
         ``deathtime``, ``admission_type``, ``admission_location``,
         ``discharge_location``, ``insurance``, ``hospital_expire_flag``.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
         """
         df = self._loader.admissions(subject_ids=subject_ids, hadm_ids=hadm_ids)
         _SCHEMAS["admissions"].validate(df)
@@ -308,6 +323,10 @@ class MimicTableLoader:
 
         Parameters
         ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
         primary_only:
             If ``True``, keep only rows where ``seq_num == 1`` (the
             principal/primary diagnosis per admission).  Default ``False``
@@ -336,6 +355,12 @@ class MimicTableLoader:
 
         Parameters
         ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        stay_ids:
+            Restrict to these ICU stays.
         with_los_band:
             If ``True``, add a ``los_band`` categorical column bucketing
             length-of-stay into ``<1d``, ``1-3d``, ``3-7d``, ``>7d``.

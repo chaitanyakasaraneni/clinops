@@ -70,8 +70,10 @@ Issues        = "https://github.com/chaitanyakasaraneni/clinops/issues"
 packages = ["clinops"]
 
 [tool.ruff]
-line-length    = 100
+line-length    = 99
 target-version = "py312"
+# Symlinks to examples/notebooks, which are linted there.
+extend-exclude = ["docs/tutorials"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "ANN", "B", "SIM"]

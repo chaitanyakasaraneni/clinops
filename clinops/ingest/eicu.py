@@ -12,7 +12,10 @@ Two classes are provided:
     Low-level, one-method-per-table reader. Returns lightly-validated
     DataFrames straight from the CSV files. Large tables (``vitalPeriodic``,
     ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``) are read in
-    chunks so they never have to fit in memory at once.
+    chunks, and the stay and row filters are applied to each chunk, so only
+    the matching rows are held in memory. The result itself is in memory, so a
+    large cohort still needs memory for its rows. Parquet files are read whole
+    (only the needed columns).
 
 ``EicuTableLoader``
     High-level builder that turns the raw tables into the ICHI-compatible
@@ -145,8 +148,8 @@ class EicuConfig(BaseModel):
         is missing a required column. If ``False``, log a warning and continue.
     chunk_size:
         Row count per chunk when reading large tables (``vitalPeriodic``,
-        ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``).
-        Default 100_000.
+        ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``,
+        ``infusionDrug``) from CSV. Parquet files are read whole. Default 100_000.
     """
 
     data_dir: Path
@@ -179,9 +182,10 @@ class EicuLoader:
 
     One method per table. Each returns a DataFrame with lowercase columns
     (eICU CSVs are already lowercase, so no normalisation is applied) and a
-    minimal required-column check. Large tables are read in chunks; an optional
-    ``patient_unit_stay_ids`` filter is pushed down into each chunk so a cohort
-    subset never materialises the full table.
+    minimal required-column check. Large CSV tables are read in chunks; an
+    optional ``patient_unit_stay_ids`` filter is applied to each chunk, so a
+    cohort subset holds only its own rows in memory, never the full table.
+    Parquet files are read whole (only the needed columns).
 
     Parameters
     ----------
@@ -343,7 +347,7 @@ class EicuLoader:
         categories: Sequence[str] | None = None,
     ) -> pd.DataFrame:
         """
-        Load ``nurseCharting`` (~11 GB). Chunked read — never read whole.
+        Load ``nurseCharting`` (~11 GB). Chunked read; only matching rows are kept.
 
         Parameters
         ----------
@@ -994,7 +998,9 @@ class EicuTableLoader:
             return pd.DataFrame(columns=["patientunitstayid", "apache_ii"])
         ap = ap[ap["apachescore"] >= 0]  # eICU uses -1 for missing
         # Prefer APACHE IV/IVa rows when both versions exist; take max score.
-        return ap.groupby("patientunitstayid", as_index=False).agg(apache_ii=("apachescore", "max"))
+        return ap.groupby("patientunitstayid", as_index=False).agg(
+            apache_ii=("apachescore", "max")
+        )
 
     # -- hourly assembly ----------------------------------------------------
 
@@ -1015,7 +1021,9 @@ class EicuTableLoader:
             columns=list(_VITAL_SOURCES.values()),
         )
         vp = vp.rename(columns={src: feat for feat, src in _VITAL_SOURCES.items()})
-        vp["hour"] = (pd.to_numeric(vp["observationoffset"], errors="coerce") // 60).astype("Int64")
+        vp["hour"] = (pd.to_numeric(vp["observationoffset"], errors="coerce") // 60).astype(
+            "Int64"
+        )
         vp = vp[(vp["hour"] >= 0) & (vp["hour"] < self._cfg.max_icu_hours)]
         agg = vp.groupby(["patientunitstayid", "hour"], as_index=False)[_VITAL_FEATURES].mean()
 
@@ -1076,7 +1084,9 @@ class EicuTableLoader:
                 unmapped[:25],
             )
         lab = lab.dropna(subset=["feature"])
-        lab["hour"] = (pd.to_numeric(lab["labresultoffset"], errors="coerce") // 60).astype("Int64")
+        lab["hour"] = (pd.to_numeric(lab["labresultoffset"], errors="coerce") // 60).astype(
+            "Int64"
+        )
         lab = lab[(lab["hour"] >= 0) & (lab["hour"] < self._cfg.max_icu_hours)]
         lab["labresult"] = pd.to_numeric(lab["labresult"], errors="coerce")
 
@@ -1091,7 +1101,9 @@ class EicuTableLoader:
 
     def _hourly_gcs(self, stay_ids: list[int]) -> pd.DataFrame:
         """Extract hourly GCS total from nurseCharting (category 'Scores')."""
-        nc = self._loader.load_nurse_charting(patient_unit_stay_ids=stay_ids, categories=["Scores"])
+        nc = self._loader.load_nurse_charting(
+            patient_unit_stay_ids=stay_ids, categories=["Scores"]
+        )
         if nc.empty:
             return pd.DataFrame(columns=["patientunitstayid", "hour", "gcs_total"])
 

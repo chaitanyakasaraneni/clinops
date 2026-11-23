@@ -109,7 +109,9 @@ class Imputer:
     >>> import numpy as np
     >>> import pandas as pd
     >>> from clinops.temporal import ImputationStrategy, Imputer
-    >>> train = pd.DataFrame({"subject_id": [1, 1, 2, 2], "heart_rate": [60.0, 80.0, 100.0, 100.0]})
+    >>> train = pd.DataFrame(
+    ...     {"subject_id": [1, 1, 2, 2], "heart_rate": [60.0, 80.0, 100.0, 100.0]}
+    ... )
     >>> test = pd.DataFrame({"subject_id": [1, 3], "heart_rate": [np.nan, np.nan]})
     >>> imputer = Imputer(ImputationStrategy.MEAN, per_patient=True, id_col="subject_id")
     >>> imputer.fit(train).transform(test)["heart_rate"].tolist()
@@ -217,7 +219,9 @@ class Imputer:
                 grouped = df.groupby(self.id_col, sort=False, dropna=False)[numeric_cols]
                 df[numeric_cols] = grouped.ffill() if forward else grouped.bfill()
             else:
-                df[numeric_cols] = df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
+                df[numeric_cols] = (
+                    df[numeric_cols].ffill() if forward else df[numeric_cols].bfill()
+                )
 
         elif self.strategy == ImputationStrategy.LINEAR:
             if has_id:

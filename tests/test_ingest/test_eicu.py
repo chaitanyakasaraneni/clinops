@@ -530,6 +530,19 @@ def test_grouped_split_no_patient_leak():
     assert total == len(df)
 
 
+def test_grouped_split_leak_raises(monkeypatch):
+    # Simulate a bug that puts one patient in two folds: the permutation
+    # repeats the first group, so it lands in both test and validation.
+    class RepeatingRng:
+        def permutation(self, groups):
+            return np.concatenate([groups[:1], groups])
+
+    monkeypatch.setattr(np.random, "default_rng", lambda seed: RepeatingRng())
+    df = pd.DataFrame({"uniquepid": [f"P{i}" for i in range(10)]})
+    with pytest.raises(RuntimeError, match="leaked across folds"):
+        GroupedPatientSplitter(val_size=0.1, test_size=0.1).split(df)
+
+
 def test_grouped_split_is_deterministic():
     df = pd.DataFrame({"uniquepid": [f"P{i // 2}" for i in range(40)]})
     a = GroupedPatientSplitter(random_state=7).split(df)

@@ -130,7 +130,9 @@ class TestTemporalSplitter:
         result = splitter.split(temporal_df)
         assert result.train_size + result.test_size == len(temporal_df)
 
-    @pytest.mark.parametrize(("cutoff", "empty"), [("2200-01-01", "test"), ("2100-01-01", "train")])
+    @pytest.mark.parametrize(
+        ("cutoff", "empty"), [("2200-01-01", "test"), ("2100-01-01", "train")]
+    )
     def test_cutoff_outside_data_raises(self, temporal_df, cutoff, empty):
         # An empty split breaks downstream code that expects data (pyOpenSci #39).
         with pytest.raises(ValueError, match=f"{empty} split empty"):

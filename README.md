@@ -13,6 +13,9 @@ and time-series feature engineering for healthcare AI research.
 
 **Docs:** https://clinops.readthedocs.io/ &nbsp;|&nbsp; **PyPI:** https://pypi.org/project/clinops/
 
+**Install:** `pip install clinops` (Python 3.12+). Cloud extras, data access, and
+development setup are under [Installation](#installation).
+
 ---
 
 ![clinops pipeline diagram](https://raw.githubusercontent.com/chaitanyakasaraneni/clinops/main/imgs/clinops_v0.1.png)
@@ -145,7 +148,7 @@ No `ColumnSpec` definitions, no schema boilerplate.
 from clinops.ingest import MimicTableLoader
 
 # chunk_size streams chartevents/labevents and filters each chunk,
-# so the multi-GB tables never have to fit in memory
+# so only the matching rows of the multi-GB tables are held in memory
 tbl = MimicTableLoader("/data/mimic-iv-2.2", chunk_size=1_000_000)
 
 # ICU vitals — charttime parsed as datetime automatically
@@ -222,8 +225,9 @@ split = GroupedPatientSplitter(
 ).split(meta)
 ```
 
-Large tables (`vitalPeriodic`, `nurseCharting`, `lab`, …) are read in chunks, so
-the 6–11 GB files never have to fit in memory.
+Large CSV tables (`vitalPeriodic`, `nurseCharting`, `lab`, …) are read in chunks and
+filtered by stay as they are read, so the 6–11 GB files are never held in memory whole;
+only the rows for the requested stays are. Parquet files are read whole.
 
 ### Load FHIR R4 resources
 
@@ -482,6 +486,24 @@ pip install clinops[gcp]      # adds GCS storage for clinops.orchestrate
 pip install clinops[aws]      # adds S3 storage and Step Functions for clinops.orchestrate
 pip install -e ".[dev]"       # development
 ```
+
+### Data access
+
+MIMIC-IV, MIMIC-III, and eICU-CRD are distributed by PhysioNet and require a
+credentialed account and a signed data use agreement. Open demo subsets, which need
+no credentialing, are available for trying the loaders:
+[MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) and
+[eICU-CRD demo](https://physionet.org/content/eicu-crd-demo/2.0.1/).
+The tutorial notebooks use synthetic data and need neither.
+
+### Cloud credentials
+
+`clinops.orchestrate` uses the standard credential chains of the cloud SDKs; clinops
+stores no keys itself. For GCS, set up Application Default Credentials
+(`gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`) or pass
+`credentials_path`. For S3 and Step Functions, use the AWS credential chain
+(environment variables, `~/.aws/credentials`, or an instance role) or pass `profile`.
+See the [orchestrate guide](https://clinops.readthedocs.io/en/latest/guide/orchestrate/).
 
 ---
 

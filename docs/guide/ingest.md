@@ -121,7 +121,7 @@ MIMIC in ways that break naïve loaders, all handled here:
 | Labs are **long-format free text** (`labname`) | Harmonised via `eicu_lab_map`; unmapped names warn, never crash |
 | GCS lives in `nurseCharting` (`Scores`), not `lab` | Extracted and merged automatically |
 | DNR status lives in `carePlanGeneral`, not `diagnosis` | Cohort excludes DNR-within-6h from the correct table |
-| `vitalPeriodic` / `nurseCharting` are 6–11 GB | Chunked reads; files never fully held in memory |
+| `vitalPeriodic` / `nurseCharting` are 6–11 GB | CSV read in chunks and filtered per chunk, so only the requested stays' rows are held in memory (Parquet is read whole) |
 
 ### Low-level table access
 

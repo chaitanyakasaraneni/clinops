@@ -204,7 +204,22 @@ class MimicLoader:
         start_time: str | None = None,
         end_time: str | None = None,
     ) -> pd.DataFrame:
-        """Load hospital laboratory results."""
+        """
+        Load hospital laboratory results.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        item_ids:
+            Restrict to these ``itemid`` values (see :meth:`d_labitems`).
+        start_time:
+            ISO datetime string; exclude rows before this time.
+        end_time:
+            ISO datetime string; exclude rows after this time.
+        """
         return self._load_table(
             "labevents",
             lambda df: self._filter(
@@ -217,7 +232,16 @@ class MimicLoader:
         subject_ids: Sequence[int] | None = None,
         hadm_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
-        """Load hospital admission records."""
+        """
+        Load hospital admission records.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        """
         df = self._load_table("admissions")
         return self._filter(df, subject_ids, hadm_ids)
 
@@ -225,7 +249,14 @@ class MimicLoader:
         self,
         subject_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
-        """Load patient demographics."""
+        """
+        Load patient demographics.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        """
         df = self._load_table("patients")
         return self._filter(df, subject_ids)
 
@@ -235,7 +266,18 @@ class MimicLoader:
         hadm_ids: Sequence[int] | None = None,
         stay_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
-        """Load ICU stay metadata including LOS."""
+        """
+        Load ICU stay metadata including length of stay.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        stay_ids:
+            Restrict to these ICU stays.
+        """
         df = self._load_table("icustays")
         return self._filter(df, subject_ids, hadm_ids, stay_ids)
 
@@ -245,7 +287,19 @@ class MimicLoader:
         hadm_ids: Sequence[int] | None = None,
         drugs: Sequence[str] | None = None,
     ) -> pd.DataFrame:
-        """Load medication prescriptions."""
+        """
+        Load medication prescriptions.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        hadm_ids:
+            Restrict to these hospital admissions.
+        drugs:
+            Restrict to these drug names. A name must match the whole ``drug`` value,
+            ignoring case.
+        """
         df = self._load_table("prescriptions")
         df = self._filter(df, subject_ids, hadm_ids)
         if drugs:
@@ -257,7 +311,16 @@ class MimicLoader:
         subject_ids: Sequence[int] | None = None,
         stay_ids: Sequence[int] | None = None,
     ) -> pd.DataFrame:
-        """Load ICU fluid input events."""
+        """
+        Load ICU fluid input events.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patients.
+        stay_ids:
+            Restrict to these ICU stays.
+        """
         df = self._load_table("inputevents")
         return self._filter(df, subject_ids, None, stay_ids)
 

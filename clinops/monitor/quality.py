@@ -294,8 +294,8 @@ class DataQualityChecker:
                         )
                     )
 
-        n_errors = sum(1 for i in issues if i.severity == "error")
-        n_warnings = sum(1 for i in issues if i.severity == "warning")
+        n_errors = len([i for i in issues if i.severity == "error"])
+        n_warnings = len([i for i in issues if i.severity == "warning"])
         status = "FAILED" if n_errors else "PASSED"
         logger.info(
             f"DataQualityChecker [{status}]: "
