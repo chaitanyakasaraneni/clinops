@@ -305,6 +305,13 @@ class MimicIIILoader:
         """
         Load hospital admission and discharge records.
 
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patient IDs.
+        hadm_ids:
+            Restrict to these hospital admission IDs.
+
         Returns
         -------
         pd.DataFrame
@@ -383,6 +390,15 @@ class MimicIIILoader:
         Note: The ICU stay key in MIMIC-III is ``icustay_id``, not
         ``stay_id`` as in MIMIC-IV.
 
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patient IDs.
+        hadm_ids:
+            Restrict to these hospital admission IDs.
+        icustay_ids:
+            Restrict to these ICU stay IDs.
+
         Returns
         -------
         pd.DataFrame
@@ -404,6 +420,10 @@ class MimicIIILoader:
 
         Parameters
         ----------
+        subject_ids:
+            Restrict to these patient IDs.
+        hadm_ids:
+            Restrict to these hospital admission IDs.
         drugs:
             Restrict to these drug names (case-insensitive substring match).
 
@@ -436,6 +456,12 @@ class MimicIIILoader:
 
         Parameters
         ----------
+        subject_ids:
+            Restrict to these patient IDs.
+        hadm_ids:
+            Restrict to these hospital admission IDs.
+        icustay_ids:
+            Restrict to these ICU stay IDs.
         source:
             ``"mv"`` (MetaVision, default), ``"cv"`` (CareVue), or
             ``"both"`` to load and concatenate both tables.
@@ -505,6 +531,11 @@ class MimicIIILoader:
     ) -> pd.DataFrame:
         """
         Load patient demographics.
+
+        Parameters
+        ----------
+        subject_ids:
+            Restrict to these patient IDs.
 
         Returns
         -------
