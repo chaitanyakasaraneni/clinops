@@ -310,6 +310,18 @@ class TestICDUnmapped:
         assert pd.isna(out["icd10"].iloc[1])
 
 
+class TestICDBuiltinTable:
+    def test_builtin_icd9_codes_are_unique(self):
+        from clinops.preprocess.icd import _BUILTIN_MAPPINGS
+
+        codes = [icd9 for icd9, _, _ in _BUILTIN_MAPPINGS]
+        assert len(codes) == len(set(codes))
+        assert ICDMapper().n_mappings == len(codes) == 62  # the count the docs state
+
+    def test_empty_mapping_list_means_no_mappings(self):
+        assert ICDMapper(mappings=[]).n_mappings == 0
+
+
 class TestICDMapper:
     def test_map_known_code(self):
         mapper = ICDMapper()

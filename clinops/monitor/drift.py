@@ -220,7 +220,7 @@ class DistributionDriftDetector:
         If True, run a KS two-sample test in addition to PSI. Default True.
     columns:
         Explicit list of columns to monitor. If None, all numeric columns
-        in the reference DataFrame are monitored.
+        in the reference DataFrame are monitored; ``[]`` monitors none.
 
     Examples
     --------
@@ -265,6 +265,7 @@ class DistributionDriftDetector:
         self.run_ks_test = run_ks_test
         self.columns = columns
         self._reference_data: dict[str, np.ndarray] = {}
+        self._fitted = False
         self._bin_edges: dict[str, np.ndarray] = {}
 
     def fit(self, df: pd.DataFrame) -> DistributionDriftDetector:
@@ -281,7 +282,11 @@ class DistributionDriftDetector:
         DistributionDriftDetector
             Self, for method chaining.
         """
-        cols = self.columns or list(df.select_dtypes(include=[np.number]).columns)
+        cols = (
+            list(self.columns)
+            if self.columns is not None
+            else list(df.select_dtypes(include=[np.number]).columns)
+        )
         self._reference_data = {}
         self._bin_edges = {}
 
@@ -304,6 +309,7 @@ class DistributionDriftDetector:
             edges[-1] = np.inf
             self._bin_edges[col] = edges
 
+        self._fitted = True
         logger.info(f"DistributionDriftDetector fitted on {len(self._reference_data)} columns")
         return self
 
@@ -325,7 +331,7 @@ class DistributionDriftDetector:
         RuntimeError
             If ``fit()`` has not been called.
         """
-        if not self._reference_data:
+        if not self._fitted:
             raise RuntimeError("Call fit() before detect()")
 
         results: list[ColumnDriftResult] = []

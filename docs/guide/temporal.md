@@ -62,8 +62,8 @@ from clinops.temporal import Imputer, ImputationStrategy
 
 imputer = Imputer(
     ImputationStrategy.FORWARD_FILL,
-    max_gap_hours=6,       # re-null filled values spanning gaps > 6 hours
-    time_col="charttime",
+    max_gap_hours=6,           # re-null filled values spanning gaps > 6 hours
+    time_col="window_start",   # TemporalWindower output; use charttime for raw events
     id_col="subject_id",
 )
 imputer.fit(train_windows)

@@ -18,6 +18,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "getting-started.md"
 PAPER = ROOT / "paper" / "paper.md"
+INDEX = ROOT / "docs" / "index.md"
 DOC_PATH = "/data/mimic-iv-2.2"
 VITALS = {220045: (80, 15), 220277: (96, 3), 220210: (18, 5), 220052: (75, 12), 220181: (78, 12)}
 
@@ -165,3 +166,13 @@ def test_paper_example_runs(mimic_root: Path) -> None:
     assert set(windows["stay_id"]) == set(ns["stays"]["stay_id"])
     assert not set(result.train["subject_id"]) & set(result.test["subject_id"])
     assert result.test["hospital_expire_flag"].any()
+
+
+def test_docs_quickstart_runs(mimic_root: Path) -> None:
+    code = python_blocks(INDEX, "## Quickstart", "## Examples")
+    ns = run(code, INDEX, mimic_root)
+    windows, result = ns["windows"], ns["result"]
+    assert {"heart_rate", "spo2", "resp_rate"} <= set(windows.columns)
+    assert ns["vitals"]["heart_rate"].max() <= 300
+    assert windows["hospital_expire_flag"].notna().all()
+    assert not set(result.train["subject_id"]) & set(result.test["subject_id"])

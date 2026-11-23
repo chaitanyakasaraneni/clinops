@@ -31,31 +31,44 @@ pip install clinops
 ```python
 from clinops.ingest import MimicTableLoader
 from clinops.preprocess import ClinicalOutlierClipper
-from clinops.temporal import TemporalWindower, ImputationStrategy
 from clinops.split import StratifiedPatientSplitter
+from clinops.temporal import TemporalWindower
 
-# Load MIMIC-IV vitals
+VITALS = {220045: "heart_rate", 220277: "spo2", 220210: "resp_rate"}
+
+# Load MIMIC-IV vital signs (long format: one row per measurement)
 tbl = MimicTableLoader("/data/mimic-iv-2.2")
-charts = tbl.chartevents(subject_ids=[10000032, 10000980])
+charts = tbl.chartevents(item_ids=list(VITALS))
 
-# Clip physiologically impossible values
-charts = ClinicalOutlierClipper(action="clip").fit_transform(charts)
+# One column per vital sign, then clip physiologically impossible values
+vitals = (
+    charts.assign(vital=charts["itemid"].map(VITALS))
+    .pivot_table(index=["hadm_id", "charttime"], columns="vital", values="valuenum")
+    .reset_index()
+)
+vitals = ClinicalOutlierClipper(action="clip").fit_transform(vitals)
 
-# Build 24-hour windows with 6-hour stride
+# 24-hour windows with a 6-hour stride, one series per admission
 windows = TemporalWindower(window_hours=24, step_hours=6).fit_transform(
-    df=charts,
-    id_col="subject_id",
+    df=vitals,
+    id_col="hadm_id",
     time_col="charttime",
     feature_cols=["heart_rate", "spo2", "resp_rate"],
 )
 
-# Patient-stratified split — no leakage
+# Attach each admission's patient and outcome, then split by patient
+adm = tbl.admissions()
+windows = windows.merge(adm[["hadm_id", "subject_id", "hospital_expire_flag"]], on="hadm_id")
 result = StratifiedPatientSplitter(
     id_col="subject_id",
     outcome_col="hospital_expire_flag",
     test_size=0.2,
 ).split(windows)
+print(result.summary())
 ```
+
+[Getting started](getting-started.md) builds the same pipeline step by step, per ICU
+stay and limited to the first 48 hours.
 
 ## Examples
 
@@ -69,8 +82,8 @@ result = StratifiedPatientSplitter(
 Requires Python **3.12+**.
 
 ```bash
-pip install clinops           # core
-pip install clinops[fhir]     # adds FHIR R4 loader
-pip install clinops[gcp]      # adds GCP extras
+pip install clinops           # core, including the MIMIC, eICU, FHIR R4, and flat-file loaders
+pip install clinops[gcp]      # adds GCS storage for clinops.orchestrate
+pip install clinops[aws]      # adds S3 storage and Step Functions for clinops.orchestrate
 pip install -e ".[dev]"       # development (includes docs, linting, tests)
 ```

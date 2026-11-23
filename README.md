@@ -477,8 +477,7 @@ print(result.summary())
 Requires Python **3.12+**.
 
 ```bash
-pip install clinops           # core
-pip install clinops[fhir]     # adds FHIR R4 loader
+pip install clinops           # core, including the MIMIC, eICU, FHIR R4, and flat-file loaders
 pip install clinops[gcp]      # adds GCS storage for clinops.orchestrate
 pip install clinops[aws]      # adds S3 storage and Step Functions for clinops.orchestrate
 pip install -e ".[dev]"       # development

@@ -37,6 +37,11 @@ class TestDistributionDriftDetector:
         ref = make_df()
         assert detector.fit(ref) is detector
 
+    def test_explicit_empty_columns_monitors_nothing(self):
+        df = make_df()
+        report = DistributionDriftDetector(columns=[]).fit(df).detect(df)
+        assert report.n_columns_checked == 0
+
     def test_detect_requires_fit(self):
         detector = DistributionDriftDetector()
         with pytest.raises(RuntimeError, match="fit\\(\\)"):

@@ -103,7 +103,7 @@ patients = loader.patients()
 ```
 
 !!! note
-    Requires the `fhir` extra: `pip install clinops[fhir]`
+    The FHIR loader is part of the core install and needs no extra.
 
 ---
 

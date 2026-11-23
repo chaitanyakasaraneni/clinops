@@ -1063,3 +1063,50 @@ class TestLagFeatureBuilderInputs:
         with caplog.at_level("INFO", logger="clinops.temporal.features"):
             LagFeatureBuilder(lags=[1, 2], feature_cols=["hr"]).fit_transform(self._df())
         assert "Added 2 lag/rolling features" in caplog.text
+
+
+class TestWindowerShortData:
+    """Subjects whose data span less than window_hours - step_hours get no windows."""
+
+    def _df(self, hours_by_subject: dict[int, int]) -> pd.DataFrame:
+        rows = [
+            {
+                "subject_id": s,
+                "charttime": pd.Timestamp("2150-01-01") + pd.Timedelta(hours=h),
+                "hr": 80.0,
+            }
+            for s, n in hours_by_subject.items()
+            for h in range(n)
+        ]
+        return pd.DataFrame(rows)
+
+    def test_empty_result_keeps_columns(self, caplog):
+        windower = TemporalWindower(window_hours=24, step_hours=6)
+        with caplog.at_level("WARNING", logger="clinops.temporal.windower"):
+            out = windower.fit_transform(
+                self._df({1: 4}), id_col="subject_id", time_col="charttime", feature_cols=["hr"]
+            )
+        assert out.empty
+        assert list(out.columns) == ["subject_id", "window_start", "window_end", "hr"]
+        assert "1 of 1 subjects produced no windows" in caplog.text
+        assert "18h" in caplog.text
+
+    def test_only_short_subjects_are_counted(self, caplog):
+        windower = TemporalWindower(window_hours=24, step_hours=6)
+        with caplog.at_level("WARNING", logger="clinops.temporal.windower"):
+            out = windower.fit_transform(
+                self._df({1: 4, 2: 30}),
+                id_col="subject_id",
+                time_col="charttime",
+                feature_cols=["hr"],
+            )
+        assert set(out["subject_id"]) == {2}
+        assert "1 of 2 subjects produced no windows" in caplog.text
+
+    def test_no_message_when_every_subject_has_windows(self, caplog):
+        windower = TemporalWindower(window_hours=24, step_hours=6)
+        with caplog.at_level("WARNING", logger="clinops.temporal.windower"):
+            windower.fit_transform(
+                self._df({1: 30}), id_col="subject_id", time_col="charttime", feature_cols=["hr"]
+            )
+        assert "produced no windows" not in caplog.text

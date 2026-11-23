@@ -69,7 +69,10 @@ class TemporalWindower:
         Duration of each window in hours.
     step_hours:
         Step between window starts in hours. Use same value as window_hours
-        for non-overlapping (tumbling) windows.
+        for non-overlapping (tumbling) windows. Windows start at a subject's
+        first measurement and stop once a window would end more than one step
+        after the last, so a subject whose measurements span less than
+        ``window_hours - step_hours`` gets no windows (this is logged).
     imputation:
         How to fill features that have no observations in a window. Applied
         across each subject's windows in time order after aggregation:
@@ -81,7 +84,8 @@ class TemporalWindower:
         would be computed over every subject, including any later test set;
         apply :class:`Imputer` after splitting instead.
     min_observations:
-        Drop windows with fewer non-null observations than this threshold.
+        Drop windows with fewer input rows (measurement times) than this.
+        Default 1.
     aggregations:
         Column → aggregation function mapping. If empty, mean is used for
         all numeric columns.
@@ -189,7 +193,8 @@ class TemporalWindower:
         pd.DataFrame
             One row per (patient, window_start). Columns:
             ``id_col``, ``window_start``, ``window_end``, feature columns,
-            and optionally ``label``.
+            and optionally ``label``. If no subject has a window, the frame
+            is empty but still has these columns.
         """
         df = df.copy()
         df[time_col] = pd.to_datetime(df[time_col])
@@ -210,7 +215,8 @@ class TemporalWindower:
             f"| {len(feature_cols)} features"
         )
 
-        results = []
+        results: list[dict[str, Any]] = []
+        no_windows = 0
         window_td = pd.Timedelta(hours=self.config.window_hours)
         step_td = pd.Timedelta(hours=self.config.step_hours)
 
@@ -220,6 +226,7 @@ class TemporalWindower:
             t_end = subject_df[time_col].max()
 
             window_start = t_start
+            n_before = len(results)
             while window_start + window_td <= t_end + step_td:
                 window_end = window_start + window_td
                 mask = (subject_df[time_col] >= window_start) & (subject_df[time_col] < window_end)
@@ -234,12 +241,18 @@ class TemporalWindower:
                 )
                 results.append(row)
                 window_start += step_td
+            no_windows += len(results) == n_before
 
-        if not results:
+        min_span = self.config.window_hours - self.config.step_hours
+        if no_windows:
             logger.warning(
-                "No windows extracted — check min_observations threshold or data coverage"
+                f"{no_windows:,} of {df[id_col].nunique():,} subjects produced no windows: "
+                f"their measurements span less than {min_span:g}h (window_hours - step_hours) "
+                f"or every window has fewer than {self.config.min_observations} rows"
             )
-            return pd.DataFrame()
+        if not results:
+            columns = [id_col, "window_start", "window_end", *feature_cols]
+            return pd.DataFrame(columns=columns)
 
         result_df = pd.DataFrame(results)
         result_df = self._impute_windows(result_df, id_col, feature_cols)
