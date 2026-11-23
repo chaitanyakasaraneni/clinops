@@ -5,7 +5,7 @@ Loads Patient, Observation, Condition, and MedicationRequest resources
 from FHIR JSON bundles or NDJSON exports, normalising them into
 pandas DataFrames compatible with clinops temporal and monitor modules.
 
-Requires: pip install clinops[fhir]
+The JSON is parsed with the standard library; no extra dependency is needed.
 """
 
 from __future__ import annotations
