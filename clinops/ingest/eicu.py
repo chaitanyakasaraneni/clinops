@@ -508,6 +508,48 @@ def _text(series: pd.Series) -> pd.Series:
     return series.astype("string").fillna("")
 
 
+def _is_vasopressor_name(name: pd.Series) -> pd.Series:
+    """Drug names of systemic vasopressors (not e.g. lidocaine-epinephrine)."""
+    is_vaso: pd.Series = name.str.extract(_VASOPRESSOR_NAME, expand=False).notna()
+    return is_vaso & ~name.str.contains(_NOT_VASOPRESSOR_THERAPY)
+
+
+class _DrugCodeTally:
+    """
+    Which ``drughiclseqno`` codes carry vasopressor names, over a whole table.
+
+    About 40% of ``medication`` rows have no ``drugname``, only the code. A
+    code counts as a vasopressor when every named row that carries it is a
+    vasopressor. Used as a chunk filter, so the whole table is tallied while
+    only the cohort's rows are kept.
+    """
+
+    def __init__(self) -> None:
+        self._vaso: set[float] = set()
+        self._other: set[float] = set()
+
+    def tally(self, chunk: pd.DataFrame) -> None:
+        if "drughiclseqno" not in chunk.columns or "drugname" not in chunk.columns:
+            return
+        pairs = chunk[["drugname", "drughiclseqno"]].dropna().drop_duplicates()
+        name = _text(pairs["drugname"])
+        named = name.ne("")
+        is_vaso = _is_vasopressor_name(name)
+        code = pd.to_numeric(pairs["drughiclseqno"], errors="coerce")
+        self._vaso.update(code[named & is_vaso].tolist())
+        self._other.update(code[named & ~is_vaso].tolist())
+
+    def tally_then_keep(self, stays: set[int]) -> RowFilter:
+        def chunk_filter(chunk: pd.DataFrame) -> pd.DataFrame:
+            self.tally(chunk)
+            return chunk[chunk["patientunitstayid"].isin(stays)]
+
+        return chunk_filter
+
+    def vasopressor_codes(self) -> set[float]:
+        return self._vaso - self._other
+
+
 def parse_eicu_age(value: object) -> float:
     """
     Parse an eICU ``age`` cell into a float.
@@ -1114,13 +1156,26 @@ class EicuTableLoader:
         out[flag_name] = 1
         return out
 
-    def _hourly_vasopressors(self, stay_ids: list[int], med: pd.DataFrame) -> pd.DataFrame:
-        """Per-(stay, hour) ``vasopressor_flag`` from the configured source."""
-        if self._cfg.vasopressor_source == "medication_name":
-            return self._legacy_vasopressor_orders(med)
+    def _hourly_vasopressors(
+        self, stay_ids: list[int], med: pd.DataFrame, vaso_codes: set[float]
+    ) -> pd.DataFrame:
+        """
+        Per-(stay, hour) ``vasopressor_flag`` from charted infusions, with orders as fallback.
+
+        Whether a hospital charts infusions is decided from the whole
+        ``infusionDrug`` table, not only the cohort's stays, so restricting the
+        cohort (first stays, DNR, ``limit_stays``) cannot change which hospitals
+        fall back to orders.
+        """
+        stay_set = set(stay_ids)
+        charted: set[int] = set()  # every stay with an infusionDrug row, cohort or not
+
+        def record_then_keep(chunk: pd.DataFrame) -> pd.DataFrame:
+            charted.update(chunk["patientunitstayid"].dropna().astype(int).unique().tolist())
+            return chunk[chunk["patientunitstayid"].isin(stay_set)]
 
         try:
-            inf = self._loader.load_infusion_drug(patient_unit_stay_ids=stay_ids)
+            inf = self._loader._load_large("infusion_drug", extra_filter=record_then_keep)
         except FileNotFoundError:
             logger.warning("infusionDrug not found; vasopressor flag uses medication orders")
             inf = pd.DataFrame(columns=["patientunitstayid"])
@@ -1128,10 +1183,10 @@ class EicuTableLoader:
         # Hospitals that chart infusions use them exclusively; the rest fall back
         # to medication orders.
         cohort = self.build_cohort()
-        charted = set(inf["patientunitstayid"])
-        if "hospitalid" in cohort.columns:
+        patient = self._loader.load_patient() if "hospitalid" in cohort.columns else None
+        if patient is not None and "hospitalid" in patient.columns:
             charting_hospitals = set(
-                cohort.loc[cohort["patientunitstayid"].isin(charted), "hospitalid"]
+                patient.loc[patient["patientunitstayid"].isin(charted), "hospitalid"]
             )
             uses_infusion = cohort["hospitalid"].isin(charting_hospitals)
         else:
@@ -1145,7 +1200,7 @@ class EicuTableLoader:
             )
         frames = [
             self._vasopressor_infusions(inf),
-            self._vasopressor_orders(med, fallback),
+            self._vasopressor_orders(med, fallback, vaso_codes),
         ]
         frames = [f for f in frames if len(f)]
         if not frames:
@@ -1173,29 +1228,27 @@ class EicuTableLoader:
         running = v[v["rate"] > 0]
         return self._interval_flag(running, "start", "stop", "vasopressor_flag")
 
-    def _vasopressor_orders(self, med: pd.DataFrame, stays: set[int]) -> pd.DataFrame:
+    def _vasopressor_orders(
+        self, med: pd.DataFrame, stays: set[int], vaso_codes: set[float]
+    ) -> pd.DataFrame:
         """
         Fallback: vasopressor ``medication`` orders of ``stays`` over their order interval.
 
         An order counts when its name is a vasopressor or, for the ~40% of rows
-        without a name, its ``drughiclseqno`` is a code that only ever carries
-        vasopressor names in this data. The codes are learned from every order in
-        ``med``, not only those of ``stays``, since a drug code means the same drug
-        at every hospital. Cancelled, as-needed (PRN), one-time, and non-systemic
+        without a name, its ``drughiclseqno`` is in ``vaso_codes``: codes that
+        only ever carry vasopressor names anywhere in the ``medication`` table
+        (see :class:`_DrugCodeTally`), since a drug code means the same drug at
+        every hospital. Cancelled, as-needed (PRN), one-time, and non-systemic
         orders are skipped.
         """
         if med.empty or not stays:
             return pd.DataFrame(columns=["patientunitstayid", "hour", "vasopressor_flag"])
         name = _text(med["drugname"])
-        is_vaso_name = name.str.extract(_VASOPRESSOR_NAME, expand=False).notna() & ~(
-            name.str.contains(_NOT_VASOPRESSOR_THERAPY)
+        is_vaso_name = _is_vasopressor_name(name)
+        code = pd.to_numeric(
+            med.get("drughiclseqno", pd.Series(np.nan, index=med.index)), errors="coerce"
         )
-        code = med.get("drughiclseqno", pd.Series(np.nan, index=med.index))
-        named = name.ne("")
-        vaso_codes = set(code[named & is_vaso_name].dropna()) - set(
-            code[named & ~is_vaso_name].dropna()
-        )
-        is_vaso = is_vaso_name | (~named & code.isin(vaso_codes))
+        is_vaso = is_vaso_name | (name.eq("") & code.isin(vaso_codes))
 
         def text(col: str) -> pd.Series:
             if col not in med.columns:
@@ -1228,8 +1281,17 @@ class EicuTableLoader:
         """Per-(stay, hour) vasopressor, mechanical-ventilation, and RRT flags."""
         frames: list[pd.DataFrame] = []
 
-        med = self._loader.load_medication(patient_unit_stay_ids=stay_ids)
-        frames.append(self._hourly_vasopressors(stay_ids, med))
+        if self._cfg.vasopressor_source == "infusion":
+            # One pass over the whole table: tally which drug codes carry
+            # vasopressor names in every order, then keep only the cohort's rows.
+            codes = _DrugCodeTally()
+            med = self._loader._load_large(
+                "medication", extra_filter=codes.tally_then_keep(set(stay_ids))
+            )
+            frames.append(self._hourly_vasopressors(stay_ids, med, codes.vasopressor_codes()))
+        else:
+            med = self._loader.load_medication(patient_unit_stay_ids=stay_ids)
+            frames.append(self._legacy_vasopressor_orders(med))
         if not med.empty:
             name = med["drugname"].astype(str).str.lower()
             # RRT can also appear as a drug order.

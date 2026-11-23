@@ -823,6 +823,52 @@ def test_drug_codes_are_learned_from_every_hospital(eicu_dir: Path):
     assert _vaso_hours(eicu_dir)[101] == [1, 2, 3, 4, 5]
 
 
+def test_no_fallback_when_every_hospital_charts_infusions(eicu_dir: Path, caplog):
+    # Every fixture hospital (100, 101, 102) charts an infusion, so no stay falls
+    # back to medication orders, even one with a vasopressor order of its own.
+    _write_infusions(
+        eicu_dir,
+        [
+            (201, 60, "Norepinephrine (mcg/min)", "5"),
+            (301, 60, "Vasopressin (units/min)", "0.04"),
+            (101, 60, "Dopamine (mcg/kg/min)", "0"),
+        ],
+    )
+    _write_orders(eicu_dir, [{"patientunitstayid": 401, "drugname": "NOREPINEPHRINE"}])
+    with caplog.at_level("INFO", logger="clinops.ingest.eicu"):
+        hours = _vaso_hours(eicu_dir)
+    assert "without infusion charting" not in caplog.text
+    assert set(hours) == {201, 301}  # 101 charted a zero rate; 401's order is ignored
+
+
+def test_charting_hospitals_come_from_the_whole_infusion_table(eicu_dir: Path):
+    # 202 is dropped from the cohort (first_stay_only), but its infusion rows show
+    # that its hospital (101) charts infusions. 301 is at the same hospital, so its
+    # order must not be used, even though no cohort stay at 101 has an infusion row.
+    _write_infusions(eicu_dir, [(202, 60, "Norepinephrine (mcg/min)", "5")])
+    _write_orders(eicu_dir, [{"patientunitstayid": 301, "drugname": "NOREPINEPHRINE"}])
+    assert 301 not in _vaso_hours(eicu_dir)
+
+
+def test_drug_codes_are_learned_from_stays_outside_the_cohort(eicu_dir: Path):
+    # The only named order with code 2051 belongs to 202, which is not in the
+    # cohort; it still identifies 2051 as norepinephrine for 101's unnamed order.
+    _write_orders(
+        eicu_dir,
+        [
+            {"patientunitstayid": 202, "drugname": "NOREPINEPHRINE", "drughiclseqno": 2051},
+            {"patientunitstayid": 101, "drugname": np.nan, "drughiclseqno": 2051},
+            # A code that also carries a non-vasopressor name is not trusted.
+            {"patientunitstayid": 202, "drugname": "PHENYLEPHRINE", "drughiclseqno": 77},
+            {"patientunitstayid": 202, "drugname": "SALINE FLUSH", "drughiclseqno": 77},
+            {"patientunitstayid": 401, "drugname": np.nan, "drughiclseqno": 77},
+        ],
+    )
+    hours = _vaso_hours(eicu_dir)
+    assert hours[101] == [1, 2, 3, 4, 5]
+    assert 401 not in hours
+
+
 def test_fallback_orders_skip_non_administered_and_non_systemic(eicu_dir: Path):
     # No infusionDrug file at all: every stay falls back to medication orders.
     _write_orders(
