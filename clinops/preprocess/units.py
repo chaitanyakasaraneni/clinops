@@ -284,7 +284,9 @@ class UnitNormalizer:
     def report(self) -> pd.DataFrame:
         """Return a summary of all conversions applied."""
         if not self._converted:
-            return pd.DataFrame(columns=["column", "from_unit", "to_unit", "n_converted", "method"])
+            return pd.DataFrame(
+                columns=["column", "from_unit", "to_unit", "n_converted", "method"]
+            )
         return pd.DataFrame(self._converted)
 
     @staticmethod

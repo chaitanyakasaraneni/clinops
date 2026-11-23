@@ -56,7 +56,9 @@ VITAL_BOUNDS: dict[str, BoundSpec] = {
     "sbp": BoundSpec("sbp", 0, 300, "mmHg", "Systolic blood pressure"),
     "dbp": BoundSpec("dbp", 0, 200, "mmHg", "Diastolic blood pressure"),
     "map": BoundSpec("map", 0, 250, "mmHg", "Mean arterial pressure"),
-    "temperature": BoundSpec("temperature", 25.0, 45.0, "°C", "Severe hypothermia to hyperthermia"),
+    "temperature": BoundSpec(
+        "temperature", 25.0, 45.0, "°C", "Severe hypothermia to hyperthermia"
+    ),
     "temperature_f": BoundSpec("temperature_f", 77.0, 113.0, "°F", "°F equivalent of 25–45°C"),
     "weight": BoundSpec("weight", 0.5, 500.0, "kg", "Neonate to extreme obesity"),
     "height": BoundSpec("height", 30.0, 250.0, "cm", "Infant to extreme height"),

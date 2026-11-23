@@ -132,7 +132,9 @@ class LagFeatureBuilder:
 
 def _positive_steps(name: str, steps: list[int]) -> list[int]:
     """Check that lag steps / window sizes are positive integers."""
-    bad = [s for s in steps if isinstance(s, bool) or not isinstance(s, (int, np.integer)) or s < 1]
+    bad = [
+        s for s in steps if isinstance(s, bool) or not isinstance(s, (int, np.integer)) or s < 1
+    ]
     if bad:
         raise ValueError(
             f"{name} must be positive integers (a lag of 0 or below would use the current "

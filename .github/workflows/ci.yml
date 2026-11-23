@@ -57,8 +57,8 @@ jobs:
       - name: Lint and format check
         if: matrix.pandas == 'pandas>=3,<4'
         run: |
-          ruff check clinops/
-          ruff format --check clinops/ tests/
+          ruff check .
+          ruff format --check .
 
       - name: Type check
         if: matrix.pandas == 'pandas>=3,<4'

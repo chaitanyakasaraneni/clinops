@@ -430,7 +430,8 @@ class TestFHIRLoader:
     def test_ndjson_skips_wrong_resource_type(self, tmp_path):
         f = tmp_path / "mixed.ndjson"
         f.write_text(
-            '{"resourceType": "Patient", "id": "p1"}\n{"resourceType": "Observation", "id": "o1"}\n'
+            '{"resourceType": "Patient", "id": "p1"}\n'
+            '{"resourceType": "Observation", "id": "o1"}\n'
         )
         loader = FHIRLoader(f)
         df = loader.patients()

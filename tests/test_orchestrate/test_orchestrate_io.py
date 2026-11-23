@@ -292,7 +292,9 @@ class TestS3PipelineStoreIO:
 
 
 def make_pipeline(client: FakeSFNClient) -> StepFunctionsPipeline:
-    pipeline = StepFunctionsPipeline(name="clinops-daily", role_arn="arn:aws:iam::123:role/SFNRole")
+    pipeline = StepFunctionsPipeline(
+        name="clinops-daily", role_arn="arn:aws:iam::123:role/SFNRole"
+    )
     pipeline.add_step(PipelineStep(name="Ingest", resource="arn:aws:lambda:::function:ingest"))
     pipeline.add_step(PipelineStep(name="Split", resource="arn:aws:lambda:::function:split"))
     pipeline._client = client

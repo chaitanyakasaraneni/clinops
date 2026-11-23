@@ -235,7 +235,9 @@ class GroupedPatientSplitter:
             (train_groups & val_groups) | (train_groups & test_groups) | (val_groups & test_groups)
         )
         if overlap:
-            raise RuntimeError(f"GroupedPatientSplitter: {len(overlap)} groups leaked across folds")
+            raise RuntimeError(
+                f"GroupedPatientSplitter: {len(overlap)} groups leaked across folds"
+            )
 
         meta: dict[str, Any] = {
             "group_col": self.group_col,
@@ -388,7 +390,9 @@ class TemporalSplitter:
                 f"{times.min()} to {times.max()})"
             )
 
-        logger.info(f"TemporalSplitter: cutoff={cutoff} → train={len(train):,}, test={len(test):,}")
+        logger.info(
+            f"TemporalSplitter: cutoff={cutoff} → train={len(train):,}, test={len(test):,}"
+        )
 
         return SplitResult(
             train=train,
