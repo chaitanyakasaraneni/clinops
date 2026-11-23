@@ -12,7 +12,10 @@ Two classes are provided:
     Low-level, one-method-per-table reader. Returns lightly-validated
     DataFrames straight from the CSV files. Large tables (``vitalPeriodic``,
     ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``) are read in
-    chunks so they never have to fit in memory at once.
+    chunks, and the stay and row filters are applied to each chunk, so only
+    the matching rows are held in memory. The result itself is in memory, so a
+    large cohort still needs memory for its rows. Parquet files are read whole
+    (only the needed columns).
 
 ``EicuTableLoader``
     High-level builder that turns the raw tables into the ICHI-compatible
@@ -145,8 +148,8 @@ class EicuConfig(BaseModel):
         is missing a required column. If ``False``, log a warning and continue.
     chunk_size:
         Row count per chunk when reading large tables (``vitalPeriodic``,
-        ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``).
-        Default 100_000.
+        ``nurseCharting``, ``lab``, ``medication``, ``vitalAperiodic``,
+        ``infusionDrug``) from CSV. Parquet files are read whole. Default 100_000.
     """
 
     data_dir: Path
@@ -179,9 +182,10 @@ class EicuLoader:
 
     One method per table. Each returns a DataFrame with lowercase columns
     (eICU CSVs are already lowercase, so no normalisation is applied) and a
-    minimal required-column check. Large tables are read in chunks; an optional
-    ``patient_unit_stay_ids`` filter is pushed down into each chunk so a cohort
-    subset never materialises the full table.
+    minimal required-column check. Large CSV tables are read in chunks; an
+    optional ``patient_unit_stay_ids`` filter is applied to each chunk, so a
+    cohort subset holds only its own rows in memory, never the full table.
+    Parquet files are read whole (only the needed columns).
 
     Parameters
     ----------
@@ -343,7 +347,7 @@ class EicuLoader:
         categories: Sequence[str] | None = None,
     ) -> pd.DataFrame:
         """
-        Load ``nurseCharting`` (~11 GB). Chunked read — never read whole.
+        Load ``nurseCharting`` (~11 GB). Chunked read; only matching rows are kept.
 
         Parameters
         ----------
