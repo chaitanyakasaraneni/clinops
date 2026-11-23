@@ -138,7 +138,11 @@ class GroupedPatientSplitter:
         Fractions of *groups* assigned to validation and test. The remainder is
         train. Must sum to < 1. Defaults 0.15 / 0.15.
     random_state:
-        Seed for reproducible group assignment. Default 42.
+        Seed for the random assignment. Default 42, a fixed value so a split
+        is reproducible without extra arguments; anyone who keeps the default
+        gets the same assignment for the same data. Pass your own seed (NumPy
+        recommends a large random one, e.g. from ``secrets.randbits(64)``) to
+        get an independent split, or ``None`` for a different split each run.
 
     Examples
     --------
@@ -170,7 +174,7 @@ class GroupedPatientSplitter:
         stay_col: str | None = "patientunitstayid",
         val_size: float = 0.15,
         test_size: float = 0.15,
-        random_state: int = 42,
+        random_state: int | None = 42,
     ) -> None:
         if not 0 < val_size < 1 or not 0 < test_size < 1:
             raise ValueError("val_size and test_size must each be in (0, 1)")
@@ -198,6 +202,7 @@ class GroupedPatientSplitter:
         if self.group_col not in df.columns:
             raise ValueError(f"group_col '{self.group_col}' not found in DataFrame")
 
+        df = _drop_missing(df, self.group_col, "GroupedPatientSplitter")
         rng = np.random.default_rng(self.random_state)
         groups = df[self.group_col].unique()
         n = len(groups)
@@ -260,16 +265,25 @@ class TemporalSplitter:
     ``time_col`` >= ``cutoff`` go to test. This is the only split
     strategy that respects temporal ordering and prevents future leakage.
 
+    Rows with a missing time are left out of both splits (with a warning),
+    and a cutoff that leaves either split empty raises ``ValueError``.
+
     Parameters
     ----------
     cutoff:
-        Datetime string, pd.Timestamp, or None. If None, ``train_frac``
-        is used to compute the cutoff automatically from the data.
+        Where to split. For a datetime ``time_col``, a datetime string or
+        ``pd.Timestamp``; for a numeric ``time_col`` (e.g. minute offsets), a
+        number. A cutoff of the wrong kind raises ``TypeError``. If None
+        (default), the cutoff is computed from the data with ``train_frac``.
     train_frac:
         Fraction of the time range to use for training when ``cutoff``
-        is None. Default 0.8 (use the earliest 80% of time as train).
+        is None (ignored otherwise). Must be strictly between 0 and 1 either
+        way. Default 0.8 (the earliest 80% of the time range is train).
     time_col:
-        Name of the datetime column. Default ``"charttime"``.
+        Time column. Datetimes (or strings parsed as datetimes) are compared
+        as timestamps. A numeric column, such as eICU's minute offsets from
+        admission, is compared as numbers; ``cutoff`` must then be a number.
+        Default ``"charttime"``.
 
     Examples
     --------
@@ -295,11 +309,16 @@ class TemporalSplitter:
 
     def __init__(
         self,
-        cutoff: str | pd.Timestamp | None = None,
+        cutoff: str | pd.Timestamp | float | None = None,
         train_frac: float = 0.8,
         time_col: str = "charttime",
     ) -> None:
-        self.cutoff = pd.Timestamp(cutoff) if cutoff is not None else None
+        if not 0 < train_frac < 1:
+            raise ValueError(
+                f"train_frac must be strictly between 0 and 1, got {train_frac}; "
+                "otherwise one split is empty"
+            )
+        self.cutoff = cutoff
         self.train_frac = train_frac
         self.time_col = time_col
 
@@ -319,8 +338,33 @@ class TemporalSplitter:
         if self.time_col not in df.columns:
             raise ValueError(f"time_col '{self.time_col}' not found in DataFrame")
 
-        times = pd.to_datetime(df[self.time_col])
-        cutoff = self.cutoff
+        raw = df[self.time_col]
+        # Numbers (e.g. minute offsets) stay numbers: pd.to_datetime would read
+        # them as nanoseconds since 1970.
+        numeric = pd.api.types.is_numeric_dtype(raw) and not pd.api.types.is_bool_dtype(raw)
+        times = raw if numeric else pd.to_datetime(raw)
+        cutoff: Any = self.cutoff
+        if cutoff is not None:
+            if numeric and not isinstance(cutoff, (int, float, np.number)):
+                raise TypeError(
+                    f"time_col {self.time_col!r} is numeric, so cutoff must be a number, "
+                    f"got {cutoff!r}"
+                )
+            if not numeric:
+                # pd.Timestamp(1440) would silently mean 1440 ns after 1970.
+                if isinstance(cutoff, (int, float, np.number)):
+                    raise TypeError(
+                        f"time_col {self.time_col!r} holds datetimes, so cutoff must be a "
+                        f"date or timestamp, got the number {cutoff!r}"
+                    )
+                cutoff = pd.Timestamp(cutoff)
+
+        n_missing = int(times.isna().sum())
+        if n_missing:
+            logger.warning(
+                f"TemporalSplitter: {n_missing:,} rows have no {self.time_col!r} and are "
+                "left out of both splits"
+            )
 
         if cutoff is None:
             t_min = times.min()
@@ -337,6 +381,12 @@ class TemporalSplitter:
 
         train = df[train_mask].reset_index(drop=True)
         test = df[test_mask].reset_index(drop=True)
+        if train.empty or test.empty:
+            raise ValueError(
+                f"TemporalSplitter: cutoff {cutoff} leaves the "
+                f"{'train' if train.empty else 'test'} split empty (times run from "
+                f"{times.min()} to {times.max()})"
+            )
 
         logger.info(f"TemporalSplitter: cutoff={cutoff} → train={len(train):,}, test={len(test):,}")
 
@@ -344,7 +394,7 @@ class TemporalSplitter:
             train=train,
             test=test,
             metadata={
-                "cutoff": str(cutoff),
+                "cutoff": _py(cutoff) if numeric else str(cutoff),
                 "time_col": self.time_col,
                 "train_rows": len(train),
                 "test_rows": len(test),
@@ -367,7 +417,11 @@ class PatientSplitter:
     test_size:
         Fraction of patients to hold out for testing. Default 0.2.
     random_state:
-        Random seed for reproducibility. Default 42.
+        Seed for the random assignment. Default 42, a fixed value so a split
+        is reproducible without extra arguments; anyone who keeps the default
+        gets the same assignment for the same data. Pass your own seed (NumPy
+        recommends a large random one, e.g. from ``secrets.randbits(64)``) to
+        get an independent split, or ``None`` for a different split each run.
 
     Examples
     --------
@@ -389,7 +443,7 @@ class PatientSplitter:
         self,
         id_col: str = "subject_id",
         test_size: float = 0.2,
-        random_state: int = 42,
+        random_state: int | None = 42,
     ) -> None:
         if not 0 < test_size < 1:
             raise ValueError(f"test_size must be between 0 and 1, got {test_size}")
@@ -413,6 +467,7 @@ class PatientSplitter:
         if self.id_col not in df.columns:
             raise ValueError(f"id_col '{self.id_col}' not found in DataFrame")
 
+        df = _drop_missing(df, self.id_col, "PatientSplitter")
         rng = np.random.default_rng(self.random_state)
         all_patients = df[self.id_col].unique()
         n_patients = len(all_patients)
@@ -487,7 +542,11 @@ class StratifiedPatientSplitter:
         such as strings must be constant within each patient unless you pass
         a function, e.g. ``lambda s: s.iloc[-1]`` for the last value.
     random_state:
-        Random seed. Default 42.
+        Seed for the random assignment. Default 42, a fixed value so a split
+        is reproducible without extra arguments; anyone who keeps the default
+        gets the same assignment for the same data. Pass your own seed (NumPy
+        recommends a large random one, e.g. from ``secrets.randbits(64)``) to
+        get an independent split, or ``None`` for a different split each run.
 
     Examples
     --------
@@ -516,7 +575,7 @@ class StratifiedPatientSplitter:
         outcome_col: str = "mortality",
         test_size: float = 0.2,
         patient_outcome_fn: Callable[[pd.Series], Any] | None = None,
-        random_state: int = 42,
+        random_state: int | None = 42,
     ) -> None:
         if not 0 < test_size < 1:
             raise ValueError(f"test_size must be between 0 and 1, got {test_size}")
@@ -678,3 +737,14 @@ def _class_counts(labels: pd.Series, patients: set[Any]) -> dict[Hashable, int]:
     """Number of patients per label among ``patients``."""
     counts = labels[labels.index.isin(patients)].value_counts()
     return {_py(k): int(v) for k, v in sorted(counts.items(), key=lambda kv: str(kv[0]))}
+
+
+def _drop_missing(df: pd.DataFrame, col: str, who: str) -> pd.DataFrame:
+    """Leave rows without an id out of the split, with a warning, so they are not one 'patient'."""
+    missing = df[col].isna()
+    if missing.any():
+        logger.warning(
+            f"{who}: {int(missing.sum()):,} rows have no {col!r} and are left out of the split"
+        )
+        return df[~missing]
+    return df
