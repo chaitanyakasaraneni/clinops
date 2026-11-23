@@ -135,17 +135,20 @@ class DriftReport:
     @property
     def n_low(self) -> int:
         """Number of columns with LOW severity drift."""
-        return sum(1 for r in self.results if r.severity == DriftSeverity.LOW)
+        return self._count(DriftSeverity.LOW)
 
     @property
     def n_medium(self) -> int:
         """Number of columns with MEDIUM severity drift."""
-        return sum(1 for r in self.results if r.severity == DriftSeverity.MEDIUM)
+        return self._count(DriftSeverity.MEDIUM)
 
     @property
     def n_high(self) -> int:
         """Number of columns with HIGH severity drift."""
-        return sum(1 for r in self.results if r.severity == DriftSeverity.HIGH)
+        return self._count(DriftSeverity.HIGH)
+
+    def _count(self, severity: DriftSeverity) -> int:
+        return len([r for r in self.results if r.severity == severity])
 
     def drifted_columns(self, min_severity: DriftSeverity = DriftSeverity.MEDIUM) -> list[str]:
         """
