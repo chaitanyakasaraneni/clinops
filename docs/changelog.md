@@ -52,7 +52,7 @@ feedback.
   test figures are current, and the example code, which did not run, is rewritten
   and executed in CI on synthetic MIMIC-IV data.
   ([#44](https://github.com/chaitanyakasaraneni/clinops/issues/44))
-- `ICDMapper` docs state the real size of the built-in table (63 mappings, not
+- `ICDMapper` docs state the real size of the built-in table (62 mappings, not
   ~3,000) and no longer claim Phecode or ICD-10 → ICD-9 mapping.
   ([#38](https://github.com/chaitanyakasaraneni/clinops/issues/38))
 - `CITATION.cff` and `pyproject.toml` use the same keywords.

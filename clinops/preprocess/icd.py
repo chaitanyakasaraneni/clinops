@@ -17,7 +17,7 @@ This module provides:
 Note on GEM completeness
 ------------------------
 The full CMS GEM files contain ~72,000 mappings. This module ships a
-curated subset of 63 high-frequency mappings covering conditions
+curated subset of 62 high-frequency mappings covering conditions
 commonly encountered in ICU and general hospital datasets. For full
 GEM coverage, users can load the official CMS file using
 ``ICDMapper.from_gem_file(path)``.
@@ -75,7 +75,6 @@ _ICD10_CHAPTERS: list[tuple[str, str, str]] = [
 # Format: (icd9_code, icd10_code, description)
 _BUILTIN_MAPPINGS: list[tuple[str, str, str]] = [
     # Cardiovascular
-    ("41401", "I2510", "Coronary artery disease, native vessel"),
     ("41071", "I2101", "STEMI anterior wall"),
     ("41401", "I2510", "Atherosclerotic heart disease"),
     ("4280", "I509", "Heart failure, unspecified"),
@@ -158,7 +157,7 @@ class ICDMapper:
     ----------
     mappings:
         Custom list of (icd9, icd10, description) tuples. If None,
-        uses the built-in curated mapping table.
+        uses the built-in curated mapping table; ``[]`` means no mappings.
     default_value:
         Value to use when no mapping is found. Default ``None`` (NaN in DataFrame).
 
@@ -194,7 +193,7 @@ class ICDMapper:
         mappings: list[tuple[str, str, str]] | None = None,
         default_value: str | None = None,
     ) -> None:
-        source = mappings or _BUILTIN_MAPPINGS
+        source = _BUILTIN_MAPPINGS if mappings is None else mappings
         self._icd9_to_10: dict[str, str] = {r[0]: r[1] for r in source}
         self._icd10_to_9: dict[str, list[str]] = {}
         for icd9, icd10, _ in source:
