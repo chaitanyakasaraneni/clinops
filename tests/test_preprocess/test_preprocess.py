@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -285,6 +286,28 @@ class TestUnitNormalizer:
 # -----------------------------------------------------------------------
 # ICDMapper
 # -----------------------------------------------------------------------
+
+
+class TestICDUnmapped:
+    """Codes without a mapping must not crash chapter labelling (Copilot review, #46)."""
+
+    def test_chapter_of_missing_code_is_unknown(self):
+        mapper = ICDMapper()
+        assert mapper.chapter(None) == "Unknown"  # type: ignore[arg-type]
+        assert mapper.chapter_series(pd.Series(["I509", np.nan, None])).tolist() == [
+            "Diseases of the circulatory system",
+            "Unknown",
+            "Unknown",
+        ]
+
+    def test_harmonize_warns_about_unmapped_icd9(self, caplog):
+        dx = pd.DataFrame({"code": ["4280", "99999", "I509"], "version": [9, 9, 10]})
+        with caplog.at_level("WARNING"):
+            out = ICDMapper().harmonize(dx, "code", "version", output_col="icd10")
+        assert "1 of 2 ICD-9 codes have no mapping" in caplog.text
+        assert out["code"].tolist() == ["4280", "99999", "I509"]  # originals kept
+        assert out["icd10"].iloc[0] == "I509"
+        assert pd.isna(out["icd10"].iloc[1])
 
 
 class TestICDMapper:

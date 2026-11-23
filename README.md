@@ -259,8 +259,8 @@ df = FlatFileLoader("vitals.csv", schema=schema).load()
 
 Standard statistical outlier methods (z-score, IQR) are wrong for clinical data —
 a heart rate of 180 in a patient with SVT is clinically meaningful and should not
-be removed. `ClinicalOutlierClipper` uses published physiological bounds to remove
-values that are impossible regardless of patient state.
+be removed. `ClinicalOutlierClipper` uses fixed plausibility bounds to catch values
+that are impossible regardless of patient state.
 
 ```python
 from clinops.preprocess import ClinicalOutlierClipper
@@ -275,7 +275,10 @@ print(clipper.report())
 ```
 
 Built-in bounds cover 37 variables, 12 vitals and 25 labs (`heart_rate`, `spo2`, `sbp`, `glucose`,
-`creatinine`, `ph`, `wbc`, and more). Add site-specific ranges with `add_bounds()`.
+`creatinine`, `ph`, `wbc`, and more). They are deliberately wide plausibility limits chosen
+by the clinops authors, not published reference ranges; the
+[preprocess guide](https://clinops.readthedocs.io/en/latest/guide/preprocess/#built-in-bounds)
+lists every bound. Override them or add site-specific ranges with `add_bounds()`.
 
 ### Normalize units across sites
 
